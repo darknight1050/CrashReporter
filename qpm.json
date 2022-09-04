@@ -1,0 +1,55 @@
+{
+  "sharedDir": "shared",
+  "dependenciesDir": "extern",
+  "info": {
+    "name": "CrashReporter",
+    "id": "crashreporter",
+    "version": "0.0.1",
+    "url": "https://github.com/darknight1050/CrashReporter",
+    "additionalData": {
+      "overrideSoName": "libcrashreporter.so"
+    }
+  },
+  "dependencies": [
+    {
+      "id": "beatsaber-hook",
+      "versionRange": "^3.12.0",
+      "additionalData": {
+        "extraFiles": [
+          "src/inline-hook"
+        ]
+      }
+    },
+    {
+      "id": "codegen",
+      "versionRange": "^0.25.0",
+      "additionalData": {}
+    },
+    {
+      "id": "custom-types",
+      "versionRange": "^0.15.19",
+      "additionalData": {}
+    },
+    {
+      "id": "questui",
+      "versionRange": "^0.16.4",
+      "additionalData": {}
+    },
+    {
+      "id": "config-utils",
+      "versionRange": "^0.8.0",
+      "additionalData": {}
+    },
+    {
+      "id": "modloader",
+      "versionRange": "^1.2.3",
+      "additionalData": {}
+    },
+    {
+      "id": "libcurl",
+      "versionRange": "^7.78.0",
+      "additionalData": {}
+    }
+  ],
+  "additionalData": {}
+}
