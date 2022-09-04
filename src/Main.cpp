@@ -121,10 +121,12 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone_impl, 0x0, void, int* tombstone_fd, void* p
     auto* curl = curl_easy_init();
     struct curl_slist *headers = NULL;
     headers = curl_slist_append(headers, "Accept: */*");
+    headers = curl_slist_append(headers, "Content-Type: text/plain");
     // Set headers
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers); 
     curl_easy_setopt(curl, CURLOPT_URL, query_encode(url).c_str());
-    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "POST");
+    curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
     // Don't wait forever, time out after TIMEOUT seconds.
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, TIMEOUT);
     // Follow HTTP redirects if necessary.
