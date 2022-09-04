@@ -117,6 +117,7 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone_impl, 0x0, void, int* tombstone_fd, void* p
         std::size_t offset;
     };
     ReadData* readData = 0;
+    std::string crashId = "";
     // Init curl
     auto* curl = curl_easy_init();
     struct curl_slist *headers = NULL;
@@ -149,13 +150,26 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone_impl, 0x0, void, int* tombstone_fd, void* p
         curl_easy_setopt(curl, CURLOPT_READDATA, tombstone_fd);
     }
 
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, 
+        +[](char* buffer, std::size_t size, std::size_t nitems, std::string* userdata) {
+            std::size_t newLength = size * nitems;
+            try {
+                userdata->append(buffer, newLength);
+            } catch(std::bad_alloc &e) {
+                LOG_ERROR("Failed to allocate string of size: %lu", newLength);
+                return std::size_t(0);
+            }
+            return newLength;
+        });
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &crashId);
+
     curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false);
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
     auto res = curl_easy_perform(curl);
     /* Check for errors */ 
     if (res == CURLE_OK) {
-        LOG_INFO("Uploaded %s!", type);
+        LOG_INFO("Uploaded %s with id: %s", type, crashId.c_str());
     } else {
         LOG_ERROR("Uploading %s failed: %u: %s", type, res, curl_easy_strerror(res));
     }
