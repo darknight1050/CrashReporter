@@ -99,7 +99,9 @@ extern "C" void setup(ModInfo& info) {
                undefined8 param_6,undefined8 param_7)*/
 MAKE_HOOK_NO_CATCH(engrave_tombstone_impl, 0x0, void, int* tombstone_fd, void* param_2, long param_3, int param_4, void* param_5, void* param_6, void* param_7) {
     engrave_tombstone_impl(tombstone_fd, param_2, param_3, param_4, param_5, param_6, param_7);
-    
+
+    Logger::flushAll();
+
     if(!getModConfig().Enabled.GetValue())
         return;
 
@@ -182,9 +184,9 @@ extern "C" void load() {
     uintptr_t flags2 = findPattern(flags1+4, flagsPattern);
     LOG_INFO("First flags: %p", reinterpret_cast<void*>(flags1-libunity));
     LOG_INFO("Second flags: %p", reinterpret_cast<void*>(flags2-libunity));
-	changeFlag(flags1);
-	changeFlag(flags2);
-    
+    changeFlag(flags1);
+    changeFlag(flags2);
+
     uintptr_t engrave_tombstone_implAddr = findPattern(libunity, "ff 43 04 d1 fc 63 0d a9 f7 5b 0e a9 f5 53 0f a9 f3 7b 10 a9 57 d0 3b d5 e8 16 40 f9 f4 03 02 aa");
     LOG_INFO("engrave_tombsstone_impl: %p", reinterpret_cast<void*>(engrave_tombstone_implAddr-libunity));
     INSTALL_HOOK_DIRECT(getLogger(), engrave_tombstone_impl, reinterpret_cast<void*>(engrave_tombstone_implAddr));
