@@ -5,7 +5,7 @@ DECLARE_CONFIG(ModConfig,
 
     CONFIG_VALUE(Enabled, bool, "Enabled", true);
     CONFIG_VALUE(CrashOnly, bool, "CrashOnly", true);
-    CONFIG_VALUE(Url, std::string, "Url", "http://192.168.1.104/upload");
+    CONFIG_VALUE(Url, std::string, "Url", "https://analyzer.questmodding.com/api/upload");
 
     CONFIG_INIT_FUNCTION(
         CONFIG_INIT_VALUE(Enabled);
