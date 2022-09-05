@@ -10,12 +10,32 @@
 
 #include "libcurl/shared/curl.h"
 #include "libcurl/shared/easy.h"
+
 #include <sys/mman.h>
+#include <sstream>
+#include <iomanip>
 
 #define PAGE_START(addr) (~(PAGE_SIZE - 1) & (addr))
 
 #define TIMEOUT 5000
 #define USER_AGENT (std::string("CrashReporter/") + VERSION + " (+https://github.com/darknight1050/CrashReporter)").c_str()
+
+
+ModInfo modInfo;
+
+Logger& getLogger() {
+    static auto logger = new Logger(modInfo, LoggerOptions(false, true)); 
+    return *logger; 
+}
+
+DEFINE_CONFIG(ModConfig);
+
+extern "C" void setup(ModInfo& info) {
+    modInfo.id = ID;
+    modInfo.version = VERSION;
+    info = modInfo;
+    getModConfig().Init(modInfo);
+}
 
 std::string query_encode(const std::string& s) {
     std::string ret;
@@ -77,28 +97,46 @@ std::string query_encode(const std::string& s) {
     return ret;
 }
 
-ModInfo modInfo;
-
-Logger& getLogger() {
-    static auto logger = new Logger(modInfo, LoggerOptions(false, true)); 
-    return *logger; 
+std::string escape_json(const std::string &s) {
+    std::ostringstream o;
+    for (auto c = s.cbegin(); c != s.cend(); c++) {
+        switch (*c) {
+        case '"': o << "\\\""; break;
+        case '\\': o << "\\\\"; break;
+        case '\b': o << "\\b"; break;
+        case '\f': o << "\\f"; break;
+        case '\n': o << "\\n"; break;
+        case '\r': o << "\\r"; break;
+        case '\t': o << "\\t"; break;
+        default:
+            if ('\x00' <= *c && *c <= '\x1f') {
+                o << "\\u"
+                  << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(*c);
+            } else {
+                o << *c;
+            }
+        }
+    }
+    return o.str();
 }
 
-DEFINE_CONFIG(ModConfig);
-
-extern "C" void setup(ModInfo& info) {
-    modInfo.id = ID;
-    modInfo.version = VERSION;
-    info = modInfo;
-    getModConfig().Init(modInfo);
+std::string readFD(int fd) {
+    std::string data;
+    const int bufSize = 4096;
+    char buf[bufSize];
+    int size = 0;
+    do {
+        size = read(fd, buf, bufSize);
+        data.append(buf, size);
+    } while (size > 0);
+    return data;
 }
-
 
 /*void _Z17engrave_tombstoneN7android4base14unique_fd_implINS0_13DefaultCloserEEEPvRKNSt6__ndk13mapIi1 0ThreadInfoNS5_4lessIiEENS5_9allocatorINS5_4pairIKiS7_EEEEEEimPNS6_Ii6FDInfoS9_NSA_INSB_ISC_SI_EEEEE EPNS5_12basic_stringIcNS5_11char_traitsIcEENSA_IcEEEE
                (undefined4 *param_1,undefined8 param_2,long param_3,int param_4,undefined8 param_5,
                undefined8 param_6,undefined8 param_7)*/
-MAKE_HOOK_NO_CATCH(engrave_tombstone_impl, 0x0, void, int* tombstone_fd, void* param_2, long param_3, int param_4, void* param_5, void* param_6, void* param_7) {
-    engrave_tombstone_impl(tombstone_fd, param_2, param_3, param_4, param_5, param_6, param_7);
+MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_2, long param_3, int param_4, void* param_5, void* param_6, void* param_7) {
+    engrave_tombstone(tombstone_fd, param_2, param_3, param_4, param_5, param_6, param_7);
 
     Logger::flushAll();
 
@@ -107,22 +145,23 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone_impl, 0x0, void, int* tombstone_fd, void* p
 
     std::string url = getModConfig().Url.GetValue();
     const char* type = getModConfig().CrashOnly.GetValue() ? "crash" : "tombstone";
+    std::string userId = getModConfig().UserId.GetValue();
    
     LOG_INFO("Uploading %s to: %s", type, url.c_str());
 
     lseek(*tombstone_fd, 0, SEEK_SET);
 
-    struct ReadData {
-        std::string data;
-        std::size_t offset;
+    struct UploadData {
+        std::string data = "";
+        std::size_t offset = 0;
     };
-    ReadData* readData = 0;
+    UploadData* uploadData = new UploadData();
     std::string crashId = "";
     // Init curl
     auto* curl = curl_easy_init();
     struct curl_slist *headers = NULL;
     headers = curl_slist_append(headers, "Accept: */*");
-    headers = curl_slist_append(headers, "Content-Type: text/plain");
+    headers = curl_slist_append(headers, "Content-Type: application/json");
     // Set headers
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers); 
     curl_easy_setopt(curl, CURLOPT_URL, query_encode(url).c_str());
@@ -132,24 +171,21 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone_impl, 0x0, void, int* tombstone_fd, void* p
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, TIMEOUT);
     // Follow HTTP redirects if necessary.
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    uploadData->data = "{\"userId\": \"" + userId + "\", \"stacktrace\": \"";
     if(getModConfig().CrashOnly.GetValue()) {
-        readData = new ReadData { std::string(*reinterpret_cast<char**>(param_2)), 0 };
-        curl_easy_setopt(curl, CURLOPT_READFUNCTION,
-            +[](char* buffer, std::size_t size, std::size_t nitems, ReadData* userdata) {
-                std::size_t length = std::min(userdata->data.size() - userdata->offset, size * nitems);
-                memcpy(buffer, userdata->data.data() + userdata->offset, length);
-                userdata->offset += length;
-                return length;
-            });
-        curl_easy_setopt(curl, CURLOPT_READDATA, readData);
+        uploadData->data += escape_json(std::string(*reinterpret_cast<char**>(param_2)));
     } else {
-        curl_easy_setopt(curl, CURLOPT_READFUNCTION,
-            +[](char* buffer, std::size_t size, std::size_t nitems, int* userdata) {
-                return read(*userdata, buffer, size * nitems);
-            });
-        curl_easy_setopt(curl, CURLOPT_READDATA, tombstone_fd);
+        uploadData->data += escape_json(readFD(*tombstone_fd));
     }
-
+    uploadData->data += "\"}";
+    curl_easy_setopt(curl, CURLOPT_READFUNCTION,
+        +[](char* buffer, std::size_t size, std::size_t nitems, UploadData* userdata) {
+            std::size_t length = std::min(userdata->data.size() - userdata->offset, size * nitems);
+            memcpy(buffer, userdata->data.data() + userdata->offset, length);
+            userdata->offset += length;
+            return length;
+        });
+    curl_easy_setopt(curl, CURLOPT_READDATA, uploadData);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, 
         +[](char* buffer, std::size_t size, std::size_t nitems, std::string* userdata) {
             std::size_t newLength = size * nitems;
@@ -169,15 +205,15 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone_impl, 0x0, void, int* tombstone_fd, void* p
     auto res = curl_easy_perform(curl);
     /* Check for errors */ 
     if (res == CURLE_OK) {
-        LOG_INFO("Uploaded %s with id: %s", type, crashId.c_str());
+        LOG_INFO("Uploaded %s with crashId: %s and userId: %s", type, crashId.c_str(), userId.c_str());
     } else {
         LOG_ERROR("Uploading %s failed: %u: %s", type, res, curl_easy_strerror(res));
     }
     long httpCode(0);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
     curl_easy_cleanup(curl);
-    if(readData)
-        delete readData;
+    if(uploadData)
+        delete uploadData;
 }
 
 void changeFlag(uintptr_t addr) {
@@ -191,10 +227,15 @@ extern "C" void load() {
     il2cpp_functions::Init();
     QuestUI::Init();
     custom_types::Register::AutoRegister();
+
+    if(getModConfig().UserId.GetValue().empty()) {
+        static function_ptr_t<StringW> getDeviceUniqueIdentifier = il2cpp_utils::resolve_icall<StringW>("UnityEngine.SystemInfo::GetDeviceUniqueIdentifier");
+        getModConfig().UserId.SetValue(getDeviceUniqueIdentifier());
+    }
     
     uintptr_t libunity = baseAddr("libunity.so");
 
-    //Change open() flags to O_RDWR
+    //Change open() flags to O_RDWR, so that we can read the tombstone file descriptor again
     auto flagsPattern = "?? 18 90 52";
     uintptr_t flags1 = findPattern(libunity, flagsPattern);
     uintptr_t flags2 = findPattern(flags1+4, flagsPattern);
@@ -203,9 +244,9 @@ extern "C" void load() {
     changeFlag(flags1);
     changeFlag(flags2);
 
-    uintptr_t engrave_tombstone_implAddr = findPattern(libunity, "ff 43 04 d1 fc 63 0d a9 f7 5b 0e a9 f5 53 0f a9 f3 7b 10 a9 57 d0 3b d5 e8 16 40 f9 f4 03 02 aa");
-    LOG_INFO("engrave_tombsstone_impl: %p", reinterpret_cast<void*>(engrave_tombstone_implAddr-libunity));
-    INSTALL_HOOK_DIRECT(getLogger(), engrave_tombstone_impl, reinterpret_cast<void*>(engrave_tombstone_implAddr));
+    uintptr_t engrave_tombstoneAddr = findPattern(libunity, "ff 43 04 d1 fc 63 0d a9 f7 5b 0e a9 f5 53 0f a9 f3 7b 10 a9 57 d0 3b d5 e8 16 40 f9 f4 03 02 aa");
+    LOG_INFO("engrave_tombstone: %p", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
+    INSTALL_HOOK_DIRECT(getLogger(), engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
 
     LOG_INFO("Successfully installed %s!", ID);
 }
