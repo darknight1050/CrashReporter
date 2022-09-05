@@ -7,7 +7,11 @@
     "version": "0.1.1",
     "url": "https://github.com/darknight1050/CrashReporter",
     "additionalData": {
-      "overrideSoName": "libcrashreporter.so"
+      "soLink": "https://github.com/darknight1050/CrashReporter/releases/download/v0.1.1/libcrashreporter.so",
+      "debugSoLink": "https://github.com/darknight1050/CrashReporter/releases/download/v0.1.1/debug_libcrashreporter.so",
+      "overrideSoName": "libcrashreporter.so",
+      "modLink": "https://github.com/darknight1050/CrashReporter/releases/download/v0.1.1/CrashReporter.qmod",
+      "branchName": "version-v0.1.1"
     }
   },
   "dependencies": [
