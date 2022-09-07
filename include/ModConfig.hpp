@@ -4,7 +4,7 @@
 DECLARE_CONFIG(ModConfig,
 
     CONFIG_VALUE(Enabled, bool, "Enabled", true);
-    CONFIG_VALUE(FullCrash, bool, "FullCrash", false);
+    CONFIG_VALUE(FullCrash, bool, "FullCrash", false, "Upload tombstone or only backtrace");
     CONFIG_VALUE(UserId, std::string, "UserId", "");
     CONFIG_VALUE(Url, std::string, "Url", "https://analyzer.questmodding.com/api/upload");
 

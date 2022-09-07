@@ -7,6 +7,7 @@
 
 #include "CustomLogger.hpp"
 #include "ModConfig.hpp"
+#include "ModSettingsViewController.hpp"
 
 #include "libcurl/shared/curl.h"
 #include "libcurl/shared/easy.h"
@@ -225,8 +226,6 @@ void changeFlag(uintptr_t addr) {
 extern "C" void load() {
     LOG_INFO("Starting %s installation...", ID);
     il2cpp_functions::Init();
-    QuestUI::Init();
-    custom_types::Register::AutoRegister();
 
     if(getModConfig().UserId.GetValue().empty()) {
         static function_ptr_t<StringW> getDeviceUniqueIdentifier = il2cpp_utils::resolve_icall<StringW>("UnityEngine.SystemInfo::GetDeviceUniqueIdentifier");
@@ -248,5 +247,6 @@ extern "C" void load() {
     LOG_INFO("engrave_tombstone: %p", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
     INSTALL_HOOK_DIRECT(getLogger(), engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
 
+    QuestUI::Register::RegisterModSettingsViewController(modInfo, DidActivate);
     LOG_INFO("Successfully installed %s!", ID);
 }
