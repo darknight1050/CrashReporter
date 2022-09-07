@@ -144,7 +144,7 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
         return;
 
     std::string url = getModConfig().Url.GetValue();
-    const char* type = getModConfig().CrashOnly.GetValue() ? "crash" : "tombstone";
+    const char* type = getModConfig().FullCrash.GetValue() ? "tombstone" : "crash";
     std::string userId = getModConfig().UserId.GetValue();
    
     LOG_INFO("Uploading %s to: %s", type, url.c_str());
@@ -172,10 +172,10 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
     // Follow HTTP redirects if necessary.
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     uploadData->data = "{\"userId\": \"" + userId + "\", \"stacktrace\": \"";
-    if(getModConfig().CrashOnly.GetValue()) {
-        uploadData->data += escape_json(std::string(*reinterpret_cast<char**>(param_2)));
-    } else {
+    if(getModConfig().FullCrash.GetValue()) {
         uploadData->data += escape_json(readFD(*tombstone_fd));
+    } else {
+        uploadData->data += escape_json(std::string(*reinterpret_cast<char**>(param_2)));
     }
     uploadData->data += "\"}";
     curl_easy_setopt(curl, CURLOPT_READFUNCTION,
