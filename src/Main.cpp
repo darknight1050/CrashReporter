@@ -121,6 +121,60 @@ std::string escape_json(const std::string &s) {
     return o.str();
 }
 
+class LogBuffer {
+
+    char* buffer;
+    size_t size;
+    size_t index;
+    bool wrapped;
+
+public:
+    LogBuffer(size_t size) {
+        this->buffer = nullptr;
+        this->size = size;
+        this->index = 0;
+        this->wrapped = false;
+    }
+
+    ~LogBuffer() {
+        if (buffer)
+            delete buffer;
+    }
+
+    void append(const std::string& text) {
+        if(!buffer)
+            buffer = new char[size];
+        auto length = text.size();
+        if (length <= size - index) {
+            memcpy(buffer + index, text.data(), length);
+            index += length;
+            if (index >= size) {
+                index = 0;
+                wrapped = true;
+            }
+        }
+        else {
+            auto first = size - index;
+            auto second = length - first;
+            memcpy(buffer + index, text.data(), first);
+            memcpy(buffer, text.data() + first, second);
+            index = second;
+            wrapped = true;
+        }
+    }
+
+    const std::string getData() {
+        if(!buffer)
+            return "";
+        std::string data;
+        if(wrapped)
+            data.append(buffer + index, size - index);
+        data.append(buffer, index);
+        return data;
+    }
+
+};
+
 std::string readFD(int fd) {
     std::string data;
     const int bufSize = 4096;
@@ -132,6 +186,8 @@ std::string readFD(int fd) {
     } while (size > 0);
     return data;
 }
+
+LogBuffer buffer(0x40000);
 
 /*void _Z17engrave_tombstoneN7android4base14unique_fd_implINS0_13DefaultCloserEEEPvRKNSt6__ndk13mapIi1 0ThreadInfoNS5_4lessIiEENS5_9allocatorINS5_4pairIKiS7_EEEEEEimPNS6_Ii6FDInfoS9_NSA_INSB_ISC_SI_EEEEE EPNS5_12basic_stringIcNS5_11char_traitsIcEENSA_IcEEEE
                (undefined4 *param_1,undefined8 param_2,long param_3,int param_4,undefined8 param_5,
@@ -172,13 +228,26 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, TIMEOUT);
     // Follow HTTP redirects if necessary.
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+
     uploadData->data = "{\"userId\": \"" + userId + "\", \"stacktrace\": \"";
+
     if(getModConfig().FullCrash.GetValue()) {
         uploadData->data += escape_json(readFD(*tombstone_fd));
     } else {
         uploadData->data += escape_json(std::string(*reinterpret_cast<char**>(param_2)));
     }
+
+    if(getModConfig().Log.GetValue()) {
+        uploadData->data += "\", \"log\":\"";
+        std::string log = buffer.getData();
+        auto firstLineEnd = log.find("\n");
+        if(firstLineEnd != std::string::npos)
+            log.erase(0, firstLineEnd + 1);
+        uploadData->data += escape_json(log);
+    }
+
     uploadData->data += "\"}";
+
     curl_easy_setopt(curl, CURLOPT_READFUNCTION,
         +[](char* buffer, std::size_t size, std::size_t nitems, UploadData* userdata) {
             std::size_t length = std::min(userdata->data.size() - userdata->offset, size * nitems);
@@ -217,6 +286,23 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
         delete uploadData;
 }
 
+MAKE_HOOK_NO_CATCH(hook__android_log_write, 0x0, int, int prio, const char* tag, const char* text) {
+    if(getModConfig().Log.GetValue()) {
+        auto begin = std::string(tag) + ": ";
+        auto message = begin + std::string(text);
+        size_t start_pos = 0;
+        while((start_pos = message.find("\n", start_pos)) != std::string::npos) {
+            if(start_pos != message.length()-1)
+                message.insert(start_pos + 1, begin);
+            start_pos += begin.length() + 1;
+        }
+        if(!message.ends_with("\n"))
+            message += "\n";
+        buffer.append(message);
+    }
+    return hook__android_log_write(prio, tag, text);
+}
+
 void changeFlag(uintptr_t addr) {
 	mprotect((void *) PAGE_START(addr), PAGE_SIZE * 2, PROT_READ | PROT_WRITE | PROT_EXEC);
     *reinterpret_cast<char*>(addr) += 0x20;
@@ -246,6 +332,7 @@ extern "C" void load() {
     uintptr_t engrave_tombstoneAddr = findPattern(libunity, "ff 43 04 d1 fc 63 0d a9 f7 5b 0e a9 f5 53 0f a9 f3 7b 10 a9 57 d0 3b d5 e8 16 40 f9 f4 03 02 aa");
     LOG_INFO("engrave_tombstone: %p", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
     INSTALL_HOOK_DIRECT(getLogger(), engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
+    INSTALL_HOOK_DIRECT(getLogger(), hook__android_log_write, reinterpret_cast<void*>(__android_log_write));
 
     QuestUI::Register::RegisterModSettingsViewController(modInfo, DidActivate);
     LOG_INFO("Successfully installed %s!", ID);
