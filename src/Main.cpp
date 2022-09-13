@@ -179,10 +179,11 @@ std::string readFD(int fd) {
     std::string data;
     const int bufSize = 4096;
     char buf[bufSize];
-    int size = 0;
+    ssize_t size = 0;
     do {
         size = read(fd, buf, bufSize);
-        data.append(buf, size);
+        if(size > 0)
+            data.append(buf, size);
     } while (size > 0);
     return data;
 }
