@@ -188,7 +188,7 @@ std::string readFD(int fd) {
     return data;
 }
 
-LogBuffer buffer(0x40000);
+LogBuffer buffer(0x20000);
 
 /*void _Z17engrave_tombstoneN7android4base14unique_fd_implINS0_13DefaultCloserEEEPvRKNSt6__ndk13mapIi1 0ThreadInfoNS5_4lessIiEENS5_9allocatorINS5_4pairIKiS7_EEEEEEimPNS6_Ii6FDInfoS9_NSA_INSB_ISC_SI_EEEEE EPNS5_12basic_stringIcNS5_11char_traitsIcEENSA_IcEEEE
                (undefined4 *param_1,undefined8 param_2,long param_3,int param_4,undefined8 param_5,
