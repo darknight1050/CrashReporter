@@ -26,6 +26,6 @@ void DidActivate(ViewController* self, bool firstActivation, bool addedToHierarc
         AddConfigValueToggle(parent, getModConfig().Enabled);
         AddConfigValueToggle(parent, getModConfig().FullCrash);
         AddConfigValueToggle(parent, getModConfig().Log);
-        AddConfigValueStringSetting(parent, getModConfig().UserId);
+        AddConfigValueInputString(parent, getModConfig().UserId);
     }
 }

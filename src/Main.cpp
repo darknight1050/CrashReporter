@@ -18,24 +18,14 @@
 
 #define PAGE_START(addr) (~(PAGE_SIZE - 1) & (addr))
 
-#define TIMEOUT 5000
+#define TIMEOUT 3000
 #define USER_AGENT (std::string("CrashReporter/") + VERSION + " (+https://github.com/darknight1050/CrashReporter)").c_str()
-
 
 ModInfo modInfo;
 
 Logger& getLogger() {
     static auto logger = new Logger(modInfo, LoggerOptions(false, true)); 
     return *logger; 
-}
-
-DEFINE_CONFIG(ModConfig);
-
-extern "C" void setup(ModInfo& info) {
-    modInfo.id = ID;
-    modInfo.version = VERSION;
-    info = modInfo;
-    getModConfig().Init(modInfo);
 }
 
 std::string query_encode(const std::string& s) {
@@ -207,14 +197,12 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
    
     LOG_INFO("Uploading %s to: %s", type, url.c_str());
 
-    lseek(*tombstone_fd, 0, SEEK_SET);
-
     struct UploadData {
         std::string data = "";
         std::size_t offset = 0;
     };
     UploadData* uploadData = new UploadData();
-    std::string crashId = "";
+    std::string response = "";
     // Init curl
     auto* curl = curl_easy_init();
     struct curl_slist *headers = NULL;
@@ -233,21 +221,36 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
     uploadData->data = "{\"userId\": \"" + userId + "\", \"stacktrace\": \"";
 
     if(getModConfig().FullCrash.GetValue()) {
-        uploadData->data += escape_json(readFD(*tombstone_fd));
+        lseek(*tombstone_fd, 0, SEEK_SET);
+        auto data = escape_json(readFD(*tombstone_fd));
+        if(data.empty())
+            data = "Fallback to normal crash:\n" + escape_json(std::string(*reinterpret_cast<char**>(param_2)));
+        uploadData->data += data;
     } else {
         uploadData->data += escape_json(std::string(*reinterpret_cast<char**>(param_2)));
     }
+    uploadData->data += "\"";
 
     if(getModConfig().Log.GetValue()) {
-        uploadData->data += "\", \"log\":\"";
+        uploadData->data += ", \"log\":\"";
         std::string log = buffer.getData();
         auto firstLineEnd = log.find("\n");
         if(firstLineEnd != std::string::npos)
             log.erase(0, firstLineEnd + 1);
         uploadData->data += escape_json(log);
+        uploadData->data += "\"";
     }
 
-    uploadData->data += "\"}";
+    uploadData->data += ", \"mods\": [";
+    for (auto itr : Modloader::getMods()) {
+        auto info = itr.second.info;
+        uploadData->data += "{ \"name\":\"" + info.id + "\", \"version\":\"" + info.version + "\"},";
+    }
+    if(uploadData->data.ends_with(","))
+        uploadData->data.erase(uploadData->data.end()-1);
+    uploadData->data += "]";
+
+    uploadData->data += "}";
 
     curl_easy_setopt(curl, CURLOPT_READFUNCTION,
         +[](char* buffer, std::size_t size, std::size_t nitems, UploadData* userdata) {
@@ -268,23 +271,25 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
             }
             return newLength;
         });
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &crashId);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 
     curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false);
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
     auto res = curl_easy_perform(curl);
-    /* Check for errors */ 
     if (res == CURLE_OK) {
-        LOG_INFO("Uploaded %s with crashId: %s and userId: %s", type, crashId.c_str(), userId.c_str());
+        long httpCode(0);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+        if(httpCode == 200) {
+            LOG_INFO("Uploaded %s with crashId: %s and userId: %s", type, response.c_str(), userId.c_str());
+        } else {
+            LOG_ERROR("Uploading %s failed: %ld: %s", type, httpCode, response.c_str());
+        }
     } else {
         LOG_ERROR("Uploading %s failed: %u: %s", type, res, curl_easy_strerror(res));
     }
-    long httpCode(0);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
     curl_easy_cleanup(curl);
-    if(uploadData)
-        delete uploadData;
+    delete uploadData;
 }
 
 MAKE_HOOK_NO_CATCH(hook__android_log_write, 0x0, int, int prio, const char* tag, const char* text) {
@@ -307,18 +312,15 @@ MAKE_HOOK_NO_CATCH(hook__android_log_write, 0x0, int, int prio, const char* tag,
 void changeFlag(uintptr_t addr) {
 	mprotect((void *) PAGE_START(addr), PAGE_SIZE * 2, PROT_READ | PROT_WRITE | PROT_EXEC);
     *reinterpret_cast<char*>(addr) += 0x20;
-	mprotect((void *) PAGE_START(addr), PAGE_SIZE * 2, PROT_READ |  PROT_EXEC);
+	mprotect((void *) PAGE_START(addr), PAGE_SIZE * 2, PROT_READ | PROT_EXEC);
 }
 
-extern "C" void load() {
-    LOG_INFO("Starting %s installation...", ID);
-    il2cpp_functions::Init();
+extern "C" void setup(ModInfo& info) {
+    modInfo.id = ID;
+    modInfo.version = VERSION;
+    info = modInfo;
+    getModConfig().Init(modInfo);
 
-    if(getModConfig().UserId.GetValue().empty()) {
-        static function_ptr_t<StringW> getDeviceUniqueIdentifier = il2cpp_utils::resolve_icall<StringW>("UnityEngine.SystemInfo::GetDeviceUniqueIdentifier");
-        getModConfig().UserId.SetValue(getDeviceUniqueIdentifier());
-    }
-    
     uintptr_t libunity = baseAddr("libunity.so");
 
     //Change open() flags to O_RDWR, so that we can read the tombstone file descriptor again
@@ -334,6 +336,16 @@ extern "C" void load() {
     LOG_INFO("engrave_tombstone: %p", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
     INSTALL_HOOK_DIRECT(getLogger(), engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
     INSTALL_HOOK_DIRECT(getLogger(), hook__android_log_write, reinterpret_cast<void*>(__android_log_write));
+}
+
+extern "C" void load() {
+    LOG_INFO("Starting %s installation...", ID);
+    il2cpp_functions::Init();
+
+    if(getModConfig().UserId.GetValue().empty() || getModConfig().UserId.GetValue() == "Default") {
+        static function_ptr_t<StringW> getDeviceUniqueIdentifier = il2cpp_utils::resolve_icall<StringW>("UnityEngine.SystemInfo::GetDeviceUniqueIdentifier");
+        getModConfig().UserId.SetValue(getDeviceUniqueIdentifier());
+    }
 
     QuestUI::Register::RegisterModSettingsViewController(modInfo, DidActivate);
     LOG_INFO("Successfully installed %s!", ID);
