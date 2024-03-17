@@ -2,8 +2,7 @@
 #include "beatsaber-hook/shared/utils/hooking.hpp"
 
 #include "custom-types/shared/register.hpp"
-
-#include "questui/shared/QuestUI.hpp"
+#include "scotland2/shared/loader.hpp"
 
 #include "CustomLogger.hpp"
 #include "ModConfig.hpp"
@@ -11,7 +10,7 @@
 
 #include "libcurl/shared/curl.h"
 #include "libcurl/shared/easy.h"
-
+#include "bsml/shared/BSML.hpp"
 #include <sys/mman.h>
 #include <sstream>
 #include <iomanip>
@@ -21,7 +20,7 @@
 #define TIMEOUT 3000
 #define USER_AGENT (std::string("CrashReporter/") + VERSION + " (+https://github.com/darknight1050/CrashReporter)").c_str()
 
-ModInfo modInfo;
+modloader::ModInfo modInfo = {MOD_ID, VERSION, 0};
 
 Logger& getLogger() {
     static auto logger = new Logger(modInfo, LoggerOptions(false, true)); 
@@ -242,9 +241,11 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
     }
 
     uploadData->data += ", \"mods\": [";
-    for (auto itr : Modloader::getMods()) {
-        auto info = itr.second.info;
-        uploadData->data += "{ \"name\":\"" + info.id + "\", \"version\":\"" + info.version + "\"},";
+    auto modResults = modloader_get_loaded();
+    std::span<CModResult const> modResultsSpan(modResults.array, modResults.size);
+    for (auto itr : modResultsSpan) {
+        auto info = itr.info;
+        uploadData->data += "{ \"name\":\"" + std::string(info.id) + "\", \"version\":\"" + info.version + "\"}, \"version_long\":" + std::to_string(info.version_long) + "},";
     }
     if(uploadData->data.ends_with(","))
         uploadData->data.erase(uploadData->data.end()-1);
@@ -315,11 +316,11 @@ void changeFlag(uintptr_t addr) {
 	mprotect((void *) PAGE_START(addr), PAGE_SIZE * 2, PROT_READ | PROT_EXEC);
 }
 
-extern "C" void setup(ModInfo& info) {
-    modInfo.id = ID;
-    modInfo.version = VERSION;
-    info = modInfo;
-    getModConfig().Init(modInfo);
+extern "C" __attribute__((visibility("default"))) void setup(CModInfo& info) {
+    info.id = MOD_ID;
+    info.version = VERSION;
+    info.version_long = 0;
+    modInfo.assign(info);
 
     uintptr_t libunity = baseAddr("libunity.so");
 
@@ -338,15 +339,17 @@ extern "C" void setup(ModInfo& info) {
     INSTALL_HOOK_DIRECT(getLogger(), hook__android_log_write, reinterpret_cast<void*>(__android_log_write));
 }
 
-extern "C" void load() {
-    LOG_INFO("Starting %s installation...", ID);
+extern "C" __attribute__((visibility("default"))) void load() {
+    LOG_INFO("Starting %s installation...", MOD_ID);
+
     il2cpp_functions::Init();
+    BSML::Init();
 
     if(getModConfig().UserId.GetValue().empty() || getModConfig().UserId.GetValue() == "Default") {
         static function_ptr_t<StringW> getDeviceUniqueIdentifier = il2cpp_utils::resolve_icall<StringW>("UnityEngine.SystemInfo::GetDeviceUniqueIdentifier");
         getModConfig().UserId.SetValue(getDeviceUniqueIdentifier());
     }
 
-    QuestUI::Register::RegisterModSettingsViewController(modInfo, DidActivate);
-    LOG_INFO("Successfully installed %s!", ID);
+    BSML::Register::RegisterSettingsMenu(MOD_ID, DidActivate, false);
+    LOG_INFO("Successfully installed %s!", MOD_ID);
 }

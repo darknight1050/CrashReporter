@@ -1,12 +1,10 @@
 #include "ModSettingsViewController.hpp"
 
-#include "questui/shared/BeatSaberUI.hpp"
 
 #include "HMUI/Touchable.hpp"
-
+#include "bsml/shared/BSML-Lite/Creation/Layout.hpp"
 #include "ModConfig.hpp"
 
-using namespace QuestUI;
 using namespace UnityEngine;
 using namespace UnityEngine::UI;
 using namespace HMUI;
@@ -15,10 +13,10 @@ void DidActivate(ViewController* self, bool firstActivation, bool addedToHierarc
     if(firstActivation) {
         self->get_gameObject()->AddComponent<Touchable*>();
 
-        GameObject* container = BeatSaberUI::CreateScrollableSettingsContainer(self->get_transform());
+        GameObject* container = BSML::Lite::CreateScrollableSettingsContainer(self->get_transform());
         Transform* parent = container->get_transform();
 
-        auto layout = BeatSaberUI::CreateHorizontalLayoutGroup(parent);
+        auto layout = BSML::Lite::CreateHorizontalLayoutGroup(parent);
         layout->GetComponent<LayoutElement*>()->set_preferredWidth(90.0f);
         layout->set_childControlWidth(true);
         auto layoutParent = layout->get_transform();
