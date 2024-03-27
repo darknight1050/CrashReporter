@@ -14,18 +14,16 @@
 #include <sys/mman.h>
 #include <sstream>
 #include <iomanip>
+#include <android/log.h>
 
 #define PAGE_START(addr) (~(PAGE_SIZE - 1) & (addr))
 
 #define TIMEOUT 3000
 #define USER_AGENT (std::string("CrashReporter/") + VERSION + " (+https://github.com/darknight1050/CrashReporter)").c_str()
 
-modloader::ModInfo modInfo = {MOD_ID, VERSION, 0};
+std::string LibIl2CppBuildID = "not_found";
 
-Logger& getLogger() {
-    static auto logger = new Logger(modInfo, LoggerOptions(false, true)); 
-    return *logger; 
-}
+modloader::ModInfo modInfo = {MOD_ID, VERSION, 0};
 
 std::string query_encode(const std::string& s) {
     std::string ret;
@@ -185,7 +183,7 @@ LogBuffer buffer(0x20000);
 MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_2, long param_3, int param_4, void* param_5, void* param_6, void* param_7) {
     engrave_tombstone(tombstone_fd, param_2, param_3, param_4, param_5, param_6, param_7);
 
-    Logger::flushAll();
+    Paper::Logger::WaitForFlush();
 
     if(!getModConfig().Enabled.GetValue())
         return;
@@ -194,7 +192,7 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
     const char* type = getModConfig().FullCrash.GetValue() ? "tombstone" : "crash";
     std::string userId = getModConfig().UserId.GetValue();
    
-    LOG_INFO("Uploading %s to: %s", type, url.c_str());
+    LOG_INFO("Uploading {} to: {}", type, url.c_str());
 
     struct UploadData {
         std::string data = "";
@@ -217,7 +215,7 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
     // Follow HTTP redirects if necessary.
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 
-    uploadData->data = "{\"userId\": \"" + userId + "\", \"stacktrace\": \"";
+    uploadData->data = "{\"userId\": \"" + userId + "\", \"libIl2CppBuildID\": \"" + LibIl2CppBuildID + "\", \"stacktrace\": \"";
 
     if(getModConfig().FullCrash.GetValue()) {
         lseek(*tombstone_fd, 0, SEEK_SET);
@@ -267,7 +265,7 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
             try {
                 userdata->append(buffer, newLength);
             } catch(std::bad_alloc &e) {
-                LOG_ERROR("Failed to allocate string of size: %lu", newLength);
+                LOG_ERROR("Failed to allocate string of size: {}", newLength);
                 return std::size_t(0);
             }
             return newLength;
@@ -282,12 +280,12 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
         long httpCode(0);
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
         if(httpCode == 200) {
-            LOG_INFO("Uploaded %s with crashId: %s and userId: %s", type, response.c_str(), userId.c_str());
+            LOG_INFO("Uploaded {} with crashId: {} and userId: {}", type, response.c_str(), userId.c_str());
         } else {
-            LOG_ERROR("Uploading %s failed: %ld: %s", type, httpCode, response.c_str());
+            LOG_ERROR("Uploading {} failed: {}: {}", type, httpCode, response.c_str());
         }
     } else {
-        LOG_ERROR("Uploading %s failed: %u: %s", type, res, curl_easy_strerror(res));
+        LOG_ERROR("Uploading {} failed: {}: {}", type, (long)res, curl_easy_strerror(res));
     }
     curl_easy_cleanup(curl);
     delete uploadData;
@@ -321,26 +319,35 @@ extern "C" __attribute__((visibility("default"))) void setup(CModInfo& info) {
     info.version = VERSION;
     info.version_long = 0;
     modInfo.assign(info);
-
-    uintptr_t libunity = baseAddr("libunity.so");
-
-    //Change open() flags to O_RDWR, so that we can read the tombstone file descriptor again
-    auto flagsPattern = "?? 18 90 52";
-    uintptr_t flags1 = findPattern(libunity, flagsPattern);
-    uintptr_t flags2 = findPattern(flags1+4, flagsPattern);
-    LOG_INFO("First flags: %p", reinterpret_cast<void*>(flags1-libunity));
-    LOG_INFO("Second flags: %p", reinterpret_cast<void*>(flags2-libunity));
-    changeFlag(flags1);
-    changeFlag(flags2);
-
-    uintptr_t engrave_tombstoneAddr = findPattern(libunity, "ff 43 04 d1 fc 63 0d a9 f7 5b 0e a9 f5 53 0f a9 f3 7b 10 a9 57 d0 3b d5 e8 16 40 f9 f4 03 02 aa");
-    LOG_INFO("engrave_tombstone: %p", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
-    INSTALL_HOOK_DIRECT(getLogger(), engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
-    INSTALL_HOOK_DIRECT(getLogger(), hook__android_log_write, reinterpret_cast<void*>(__android_log_write));
+    getModConfig().Init(modInfo);
 }
 
 extern "C" __attribute__((visibility("default"))) void load() {
-    LOG_INFO("Starting %s installation...", MOD_ID);
+    LOG_INFO("Starting {} installation...", MOD_ID);
+
+    constexpr const auto logger = Paper::ConstLoggerContext(MOD_ID);
+
+    auto buildId = getBuildId(modloader_get_libil2cpp_path());
+    if(buildId.has_value())
+        LibIl2CppBuildID = buildId.value();
+    LOG_INFO("libil2cpp.so buildId: {}", LibIl2CppBuildID.c_str());
+
+    uintptr_t libunity = baseAddr("libunity.so");
+    LOG_INFO("libunity.so: {}", reinterpret_cast<void*>(libunity));
+    //Change open() flags to O_RDWR, so that we can read the tombstone file descriptor again
+    auto flagsPattern = "40 f9 ?? 18 90 52";
+    uintptr_t flags0 = findPattern(libunity, flagsPattern);
+    uintptr_t flags1 = findPattern(flags0+6, flagsPattern);
+    uintptr_t flags2 = findPattern(flags1+6, flagsPattern);
+    LOG_INFO("First flags: {}", reinterpret_cast<void*>(flags1-libunity));
+    LOG_INFO("Second flags: {}", reinterpret_cast<void*>(flags2-libunity));
+    changeFlag(flags1);
+    changeFlag(flags2);
+
+    uintptr_t engrave_tombstoneAddr = findPattern(libunity, "ff 43 04 d1 fc 63 0d a9 f7 5b 0e a9 f5 53 0f a9 f3 7b 10 a9 57 d0 3b d5 e8 16 40 f9 f4 03 02 aa", 0x2000000);
+    LOG_INFO("engrave_tombstone: {}", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
+    INSTALL_HOOK_DIRECT(logger, engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
+    INSTALL_HOOK_DIRECT(logger, hook__android_log_write, reinterpret_cast<void*>(__android_log_write));
 
     il2cpp_functions::Init();
     BSML::Init();
@@ -351,5 +358,5 @@ extern "C" __attribute__((visibility("default"))) void load() {
     }
 
     BSML::Register::RegisterSettingsMenu(MOD_ID, DidActivate, false);
-    LOG_INFO("Successfully installed %s!", MOD_ID);
+    LOG_INFO("Successfully installed {}!", MOD_ID);
 }
