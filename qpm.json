@@ -1,55 +1,69 @@
 {
-  "sharedDir": "shared",
-  "dependenciesDir": "extern",
-  "info": {
-    "name": "CrashReporter",
-    "id": "crashreporter",
-    "version": "0.0.1",
-    "url": "https://github.com/darknight1050/CrashReporter",
-    "additionalData": {
-      "overrideSoName": "libcrashreporter.so"
-    }
-  },
-  "dependencies": [
-    {
-      "id": "beatsaber-hook",
-      "versionRange": "^3.14.0",
-      "additionalData": {
-        "extraFiles": [
-          "src/inline-hook"
-        ]
-      }
+    "version": "0.1.0",
+    "sharedDir": "shared",
+    "dependenciesDir": "extern",
+    "info": {
+        "name": "CrashReporter",
+        "id": "crashreporter",
+        "version": "0.0.1",
+        "url": "https://github.com/darknight1050/CrashReporter",
+        "additionalData": {
+            "overrideSoName": "libcrashreporter.so",
+            "cmake": true
+        }
     },
-    {
-      "id": "codegen",
-      "versionRange": "^0.33.0",
-      "additionalData": {}
+    "workspace": {
+        "scripts": {
+            "qmod": [
+                "pwsh ./build.ps1 -clean",
+                "qpm qmod build",
+                "pwsh ./createqmod.ps1 CrashReporter"
+            ]
+        }
     },
-    {
-      "id": "custom-types",
-      "versionRange": "^0.15.23",
-      "additionalData": {}
-    },
-    {
-      "id": "questui",
-      "versionRange": "^0.17.11",
-      "additionalData": {}
-    },
-    {
-      "id": "config-utils",
-      "versionRange": "^1.0.1",
-      "additionalData": {}
-    },
-    {
-      "id": "modloader",
-      "versionRange": "^1.2.3",
-      "additionalData": {}
-    },
-    {
-      "id": "libcurl",
-      "versionRange": "^7.78.0",
-      "additionalData": {}
-    }
-  ],
-  "additionalData": {}
+    "dependencies": [
+        {
+            "id": "beatsaber-hook",
+            "versionRange": "^5.1.6",
+            "additionalData": {}
+        },
+        {
+            "id": "bs-cordl",
+            "versionRange": "3500.*",
+            "additionalData": {}
+        },
+        {
+            "id": "custom-types",
+            "versionRange": "^0.17.6",
+            "additionalData": {}
+        },
+        {
+            "id": "bsml",
+            "versionRange": "^0.4.20",
+            "additionalData": {}
+        },
+        {
+            "id": "config-utils",
+            "versionRange": "^1.4.2",
+            "additionalData": {}
+        },
+        {
+            "id": "scotland2",
+            "versionRange": "^0.1.4",
+            "additionalData": {
+                "includeQmod": false,
+                "private": true
+            }
+        },
+        {
+            "id": "libcurl",
+            "versionRange": "^8.5.0",
+            "additionalData": {}
+        },
+        {
+            "id": "paper",
+            "versionRange": "^3.6.1",
+            "additionalData": {}
+        }
+    ]
 }
