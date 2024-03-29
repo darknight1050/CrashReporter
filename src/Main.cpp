@@ -243,7 +243,7 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
     std::span<CModResult const> modResultsSpan(modResults.array, modResults.size);
     for (auto itr : modResultsSpan) {
         auto info = itr.info;
-        uploadData->data += "{ \"name\":\"" + std::string(info.id) + "\", \"version\":\"" + info.version + "\"}, \"version_long\":" + std::to_string(info.version_long) + "},";
+        uploadData->data += "{ \"name\":\"" + std::string(info.id) + "\", \"version\":\"" + info.version + "\", \"version_long\":" + std::to_string(info.version_long) + "},";
     }
     if(uploadData->data.ends_with(","))
         uploadData->data.erase(uploadData->data.end()-1);
@@ -336,9 +336,9 @@ extern "C" __attribute__((visibility("default"))) void load() {
     LOG_INFO("libunity.so: {}", reinterpret_cast<void*>(libunity));
     //Change open() flags to O_RDWR, so that we can read the tombstone file descriptor again
     auto flagsPattern = "40 f9 ?? 18 90 52";
-    uintptr_t flags0 = findPattern(libunity, flagsPattern);
-    uintptr_t flags1 = findPattern(flags0+6, flagsPattern);
-    uintptr_t flags2 = findPattern(flags1+6, flagsPattern);
+    uintptr_t flags0 = findPattern(libunity, flagsPattern) + 2;
+    uintptr_t flags1 = findPattern(flags0+4, flagsPattern) + 2;
+    uintptr_t flags2 = findPattern(flags1+4, flagsPattern) + 2;
     LOG_INFO("First flags: {}", reinterpret_cast<void*>(flags1-libunity));
     LOG_INFO("Second flags: {}", reinterpret_cast<void*>(flags2-libunity));
     changeFlag(flags1);
