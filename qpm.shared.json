@@ -9,11 +9,18 @@
       "version": "0.0.1",
       "url": "https://github.com/darknight1050/CrashReporter",
       "additionalData": {
-        "overrideSoName": "libcrashreporter.so"
+        "overrideSoName": "libcrashreporter.so",
+        "cmake": true
       }
     },
     "workspace": {
-      "scripts": {}
+      "scripts": {
+        "qmod": [
+          "pwsh ./build.ps1 -clean",
+          "qpm qmod build",
+          "pwsh ./createqmod.ps1 CrashReporter"
+        ]
+      }
     },
     "dependencies": [
       {
@@ -33,7 +40,7 @@
       },
       {
         "id": "bsml",
-        "versionRange": "^0.4.18",
+        "versionRange": "^0.4.20",
         "additionalData": {}
       },
       {
@@ -85,17 +92,17 @@
     {
       "dependency": {
         "id": "bsml",
-        "versionRange": "=0.4.18",
+        "versionRange": "=0.4.20",
         "additionalData": {
-          "soLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.18/libbsml.so",
-          "debugSoLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.18/debug_libbsml.so",
+          "soLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.20/libbsml.so",
+          "debugSoLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.20/debug_libbsml.so",
           "overrideSoName": "libbsml.so",
-          "modLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.18/BSML.qmod",
-          "branchName": "version/v0_4_18",
+          "modLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.20/BSML.qmod",
+          "branchName": "version/v0_4_20",
           "cmake": true
         }
       },
-      "version": "0.4.18"
+      "version": "0.4.20"
     },
     {
       "dependency": {
