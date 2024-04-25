@@ -339,10 +339,15 @@ extern "C" __attribute__((visibility("default"))) void load() {
     uintptr_t flags0 = findPattern(libunity, flagsPattern) + 2;
     uintptr_t flags1 = findPattern(flags0+4, flagsPattern) + 2;
     uintptr_t flags2 = findPattern(flags1+4, flagsPattern) + 2;
-    LOG_INFO("First flags: {}", reinterpret_cast<void*>(flags1-libunity));
-    LOG_INFO("Second flags: {}", reinterpret_cast<void*>(flags2-libunity));
+    LOG_INFO("First flags: {}", reinterpret_cast<void*>(flags0-libunity));
+    LOG_INFO("Second flags: {}", reinterpret_cast<void*>(flags1-libunity));
+    LOG_INFO("Third flags: {}", reinterpret_cast<void*>(flags2-libunity));
     changeFlag(flags1);
-    changeFlag(flags2);
+    if(flags2 > 2) {
+        changeFlag(flags2);
+    } else {
+        changeFlag(flags0);
+    }
 
     uintptr_t engrave_tombstoneAddr = findPattern(libunity, "ff 43 04 d1 fc 63 0d a9 f7 5b 0e a9 f5 53 0f a9 f3 7b 10 a9 57 d0 3b d5 e8 16 40 f9 f4 03 02 aa", 0x2000000);
     LOG_INFO("engrave_tombstone: {}", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
