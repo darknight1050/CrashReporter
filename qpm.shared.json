@@ -25,12 +25,12 @@
     "dependencies": [
       {
         "id": "beatsaber-hook",
-        "versionRange": "^5.1.6",
+        "versionRange": "^5.1.7",
         "additionalData": {}
       },
       {
         "id": "bs-cordl",
-        "versionRange": "3500.*",
+        "versionRange": "3700.*",
         "additionalData": {}
       },
       {
@@ -40,7 +40,7 @@
       },
       {
         "id": "bsml",
-        "versionRange": "^0.4.20",
+        "versionRange": "^0.4.39",
         "additionalData": {}
       },
       {
@@ -58,12 +58,12 @@
       },
       {
         "id": "libcurl",
-        "versionRange": "^8.5.0",
+        "versionRange": "=8.5.0",
         "additionalData": {}
       },
       {
         "id": "paper",
-        "versionRange": "^3.6.1",
+        "versionRange": "^3.6.3",
         "additionalData": {}
       }
     ]
@@ -92,17 +92,17 @@
     {
       "dependency": {
         "id": "bsml",
-        "versionRange": "=0.4.20",
+        "versionRange": "=0.4.40",
         "additionalData": {
-          "soLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.20/libbsml.so",
-          "debugSoLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.20/debug_libbsml.so",
+          "soLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.40/libbsml.so",
+          "debugSoLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.40/debug_libbsml.so",
           "overrideSoName": "libbsml.so",
-          "modLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.20/BSML.qmod",
-          "branchName": "version/v0_4_20",
+          "modLink": "https://github.com/RedBrumbler/Quest-BSML/releases/download/v0.4.40/BSML.qmod",
+          "branchName": "version/v0_4_40",
           "cmake": true
         }
       },
-      "version": "0.4.20"
+      "version": "0.4.40"
     },
     {
       "dependency": {
@@ -121,13 +121,13 @@
     {
       "dependency": {
         "id": "custom-types",
-        "versionRange": "=0.17.6",
+        "versionRange": "=0.17.8",
         "additionalData": {
-          "soLink": "https://github.com/QuestPackageManager/Il2CppQuestTypePatching/releases/download/v0.17.6/libcustom-types.so",
-          "debugSoLink": "https://github.com/QuestPackageManager/Il2CppQuestTypePatching/releases/download/v0.17.6/debug_libcustom-types.so",
+          "soLink": "https://github.com/QuestPackageManager/Il2CppQuestTypePatching/releases/download/v0.17.8/libcustom-types.so",
+          "debugSoLink": "https://github.com/QuestPackageManager/Il2CppQuestTypePatching/releases/download/v0.17.8/debug_libcustom-types.so",
           "overrideSoName": "libcustom-types.so",
-          "modLink": "https://github.com/QuestPackageManager/Il2CppQuestTypePatching/releases/download/v0.17.6/CustomTypes.qmod",
-          "branchName": "version/v0_17_6",
+          "modLink": "https://github.com/QuestPackageManager/Il2CppQuestTypePatching/releases/download/v0.17.8/CustomTypes.qmod",
+          "branchName": "version/v0_17_8",
           "compileOptions": {
             "cppFlags": [
               "-Wno-invalid-offsetof"
@@ -136,17 +136,7 @@
           "cmake": true
         }
       },
-      "version": "0.17.6"
-    },
-    {
-      "dependency": {
-        "id": "libil2cpp",
-        "versionRange": "=0.3.1",
-        "additionalData": {
-          "headersOnly": true
-        }
-      },
-      "version": "0.3.1"
+      "version": "0.17.8"
     },
     {
       "dependency": {
@@ -162,11 +152,22 @@
     },
     {
       "dependency": {
-        "id": "bs-cordl",
-        "versionRange": "=3500.0.0",
+        "id": "libil2cpp",
+        "versionRange": "=0.3.2",
         "additionalData": {
           "headersOnly": true,
-          "branchName": "version/v3500_0_0",
+          "cmake": false
+        }
+      },
+      "version": "0.3.2"
+    },
+    {
+      "dependency": {
+        "id": "bs-cordl",
+        "versionRange": "=3700.0.0",
+        "additionalData": {
+          "headersOnly": true,
+          "branchName": "version/v3700_0_0",
           "compileOptions": {
             "includePaths": [
               "include"
@@ -181,7 +182,7 @@
           }
         }
       },
-      "version": "3500.0.0"
+      "version": "3700.0.0"
     },
     {
       "dependency": {
@@ -199,15 +200,15 @@
     {
       "dependency": {
         "id": "beatsaber-hook",
-        "versionRange": "=5.1.6",
+        "versionRange": "=5.1.7",
         "additionalData": {
-          "soLink": "https://github.com/QuestPackageManager/beatsaber-hook/releases/download/v5.1.6/libbeatsaber-hook_5_1_6.so",
-          "debugSoLink": "https://github.com/QuestPackageManager/beatsaber-hook/releases/download/v5.1.6/debug_libbeatsaber-hook_5_1_6.so",
-          "branchName": "version/v5_1_6",
+          "soLink": "https://github.com/QuestPackageManager/beatsaber-hook/releases/download/v5.1.7/libbeatsaber-hook_5_1_7.so",
+          "debugSoLink": "https://github.com/QuestPackageManager/beatsaber-hook/releases/download/v5.1.7/debug_libbeatsaber-hook_5_1_7.so",
+          "branchName": "version/v5_1_7",
           "cmake": true
         }
       },
-      "version": "5.1.6"
+      "version": "5.1.7"
     },
     {
       "dependency": {
@@ -224,21 +225,6 @@
     },
     {
       "dependency": {
-        "id": "tinyxml2",
-        "versionRange": "=10.0.0",
-        "additionalData": {
-          "soLink": "https://github.com/MillzyDev/NDK-tinyxml2/releases/download/v10.0.0/libtinyxml2.so",
-          "debugSoLink": "https://github.com/MillzyDev/NDK-tinyxml2/releases/download/v10.0.0/debug_libtinyxml2.so",
-          "overrideSoName": "libtinyxml2.so",
-          "modLink": "https://github.com/MillzyDev/NDK-tinyxml2/releases/download/v10.0.0/tinyxml2.qmod",
-          "branchName": "version/v10_0_0",
-          "cmake": true
-        }
-      },
-      "version": "10.0.0"
-    },
-    {
-      "dependency": {
         "id": "fmt",
         "versionRange": "=10.0.0",
         "additionalData": {
@@ -252,6 +238,21 @@
               "-DFMT_HEADER_ONLY"
             ]
           }
+        }
+      },
+      "version": "10.0.0"
+    },
+    {
+      "dependency": {
+        "id": "tinyxml2",
+        "versionRange": "=10.0.0",
+        "additionalData": {
+          "soLink": "https://github.com/MillzyDev/NDK-tinyxml2/releases/download/v10.0.0/libtinyxml2.so",
+          "debugSoLink": "https://github.com/MillzyDev/NDK-tinyxml2/releases/download/v10.0.0/debug_libtinyxml2.so",
+          "overrideSoName": "libtinyxml2.so",
+          "modLink": "https://github.com/MillzyDev/NDK-tinyxml2/releases/download/v10.0.0/tinyxml2.qmod",
+          "branchName": "version/v10_0_0",
+          "cmake": true
         }
       },
       "version": "10.0.0"
