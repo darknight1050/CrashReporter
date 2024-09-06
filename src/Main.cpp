@@ -15,6 +15,7 @@
 #include <sstream>
 #include <iomanip>
 #include <android/log.h>
+#include <filesystem>
 
 #define PAGE_START(addr) (~(PAGE_SIZE - 1) & (addr))
 
@@ -177,6 +178,22 @@ std::string readFD(int fd) {
 
 LogBuffer buffer(0x20000);
 
+std::string getTombstoneFileName() {
+    std::vector<std::filesystem::path> files;
+    for(const auto& fp : std::filesystem::directory_iterator("/sdcard/Android/data/com.beatgames.beatsaber/files")) {
+        if(fp.path().filename().string().starts_with("tombstone_0"))
+            files.push_back(fp);
+    }
+    
+    std::sort(files.begin(), files.end(), [](const auto& a, const auto& b){ return std::filesystem::last_write_time(a) < std::filesystem::last_write_time(b); });
+    
+    // cycle around 3 tombstone files: 0-2
+    if(files.size() < 3) {
+        return "tombstone_0" + std::to_string(files.size());
+    }
+    return files.begin()->filename();
+}
+
 /*void _Z17engrave_tombstoneN7android4base14unique_fd_implINS0_13DefaultCloserEEEPvRKNSt6__ndk13mapIi1 0ThreadInfoNS5_4lessIiEENS5_9allocatorINS5_4pairIKiS7_EEEEEEimPNS6_Ii6FDInfoS9_NSA_INSB_ISC_SI_EEEEE EPNS5_12basic_stringIcNS5_11char_traitsIcEENSA_IcEEEE
                (undefined4 *param_1,undefined8 param_2,long param_3,int param_4,undefined8 param_5,
                undefined8 param_6,undefined8 param_7)*/
@@ -184,6 +201,11 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_
     engrave_tombstone(tombstone_fd, param_2, param_3, param_4, param_5, param_6, param_7);
 
     Paper::Logger::WaitForFlush();
+    
+    // allow writing tombstones without having to upload logs
+    std::filesystem::path path("/sdcard/Android/data/com.beatgames.beatsaber/files");
+    path /= getTombstoneFileName();
+    writefile(path.string(), *reinterpret_cast<char**>(param_2));
 
     if(!getModConfig().Enabled.GetValue())
         return;
