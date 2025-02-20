@@ -286,9 +286,37 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, int* param_2
     delete uploadData;
 }
 
+std::string getPrioString(android_LogPriority prio) {
+    switch(prio) {
+        case ANDROID_LOG_UNKNOWN:
+        return "U";
+        case ANDROID_LOG_DEFAULT:
+        return " ";
+        case ANDROID_LOG_VERBOSE:
+        return "V";
+        case ANDROID_LOG_DEBUG:
+        return "D";
+        case ANDROID_LOG_INFO:
+        return "I";
+        case ANDROID_LOG_WARN:
+        return "W";
+        case ANDROID_LOG_ERROR:
+        return "E";
+        case ANDROID_LOG_FATAL:
+        return "F";
+        case ANDROID_LOG_SILENT:
+        return "S";
+    }
+    return "U";
+}
+
 MAKE_HOOK_NO_CATCH(hook__android_log_write, 0x0, int, int prio, const char* tag, const char* text) {
     if(getModConfig().Log.GetValue()) {
-        auto begin = std::string(tag) + ": ";
+        if(!tag)
+            tag = "";
+        if(!text)
+            text = "";
+        auto begin = getPrioString((android_LogPriority)prio) + " " + std::string(tag) + ": ";
         auto message = begin + std::string(text);
         size_t start_pos = 0;
         while((start_pos = message.find("\n", start_pos)) != std::string::npos) {
@@ -301,6 +329,48 @@ MAKE_HOOK_NO_CATCH(hook__android_log_write, 0x0, int, int prio, const char* tag,
         buffer.append(message);
     }
     return hook__android_log_write(prio, tag, text);
+}
+
+MAKE_HOOK_NO_CATCH(hook__android_log_buf_write, 0x0, int, int bufID, int prio, const char* tag, const char* text) {
+    if(getModConfig().Log.GetValue()) {
+        if(!tag)
+            tag = "";
+        if(!text)
+            text = "";
+        auto begin = getPrioString((android_LogPriority)prio) + " " + std::string(tag) + ": ";
+        auto message = begin + std::string(text);
+        size_t start_pos = 0;
+        while((start_pos = message.find("\n", start_pos)) != std::string::npos) {
+            if(start_pos != message.length()-1)
+                message.insert(start_pos + 1, begin);
+            start_pos += begin.length() + 1;
+        }
+        if(!message.ends_with("\n"))
+            message += "\n";
+        buffer.append(message);
+    }
+    return hook__android_log_buf_write(bufID, prio, tag, text);
+}
+
+MAKE_HOOK_NO_CATCH(hook__android_log_write_log_message, 0x0, void, struct __android_log_message* log_message) {
+    if(log_message && getModConfig().Log.GetValue()) {
+        if(!log_message->tag)
+            log_message->tag = "";
+        if(!log_message->message)
+            log_message->message = "";
+        auto begin = getPrioString((android_LogPriority)log_message->priority) + " " + std::string(log_message->tag) + ": ";
+        auto message = begin + std::string(log_message->message);
+        size_t start_pos = 0;
+        while((start_pos = message.find("\n", start_pos)) != std::string::npos) {
+            if(start_pos != message.length()-1)
+                message.insert(start_pos + 1, begin);
+            start_pos += begin.length() + 1;
+        }
+        if(!message.ends_with("\n"))
+            message += "\n";
+        buffer.append(message);
+    }
+    hook__android_log_write_log_message(log_message);
 }
 
 void changeFlag(uintptr_t addr) {
@@ -341,8 +411,15 @@ extern "C" __attribute__((visibility("default"))) void load() {
     uintptr_t engrave_tombstoneAddr = findPattern(libunity, "ff 83 04 d1 fd 6b 00 f9 fe 67 0e a9 f8 5f 0f a9 f6 57 10 a9 f4 4f 11 a9 58 d0 3b d5 08 17 40 f9 e1 03 1f 2a", 0x2000000);
     LOG_INFO("engrave_tombstone: {}", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
     INSTALL_HOOK_DIRECT(logger, engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
-    INSTALL_HOOK_DIRECT(logger, hook__android_log_write, reinterpret_cast<void*>(__android_log_write));
-
+    void* __android_log_write_log_messageAddr = dlsym(RTLD_DEFAULT, "__android_log_write_log_message");
+    LOG_INFO("__android_log_write_log_message: {}", __android_log_write_log_messageAddr);
+    if(__android_log_write_log_messageAddr) {
+        INSTALL_HOOK_DIRECT(logger, hook__android_log_write_log_message, __android_log_write_log_messageAddr);
+    } else {
+        INSTALL_HOOK_DIRECT(logger, hook__android_log_write, reinterpret_cast<void*>(__android_log_write));
+        INSTALL_HOOK_DIRECT(logger, hook__android_log_buf_write, reinterpret_cast<void*>(__android_log_buf_write));
+    }
+    
     il2cpp_functions::Init();
     BSML::Init();
 
