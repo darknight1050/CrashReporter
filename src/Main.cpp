@@ -177,22 +177,17 @@ std::string readFD(int fd) {
 
 LogBuffer buffer(0x20000);
 
-/*void _Z17engrave_tombstoneN7android4base14unique_fd_implINS0_13DefaultCloserEEEPvRKNSt6__ndk13mapIi1 0ThreadInfoNS5_4lessIiEENS5_9allocatorINS5_4pairIKiS7_EEEEEEimPNS6_Ii6FDInfoS9_NSA_INSB_ISC_SI_EEEEE EPNS5_12basic_stringIcNS5_11char_traitsIcEENSA_IcEEEE
-               (undefined4 *param_1,undefined8 param_2,long param_3,int param_4,undefined8 param_5,
-               undefined8 param_6,undefined8 param_7)*/
-MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, void* param_2, long param_3, int param_4, void* param_5, void* param_6, void* param_7) {
-    engrave_tombstone(tombstone_fd, param_2, param_3, param_4, param_5, param_6, param_7);
-
-    Paper::Logger::WaitForFlush();
-
+/*void engrave_tombstone(unique_fd_impl param_1,unique_fd_impl param_2,void *param_3,map *param_4, int param_5,ProcessInfo *param_6,OpenFilesList *param_7,basic_string *param_8)*/
+MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, int* param_2, void* param_3, void* param_4, int param_5, void* param_6, void* param_7, void* param_8) {
+     engrave_tombstone(tombstone_fd, param_2, param_3, param_4, param_5, param_6, param_7, param_8);
     if(!getModConfig().Enabled.GetValue())
         return;
-
     std::string url = getModConfig().Url.GetValue();
     const char* type = getModConfig().FullCrash.GetValue() ? "tombstone" : "crash";
     std::string userId = getModConfig().UserId.GetValue();
-   
+
     LOG_INFO("Uploading {} to: {}", type, url.c_str());
+    Paper::ffi::paper2_wait_flush_timeout(50);
 
     struct UploadData {
         std::string data = "";
@@ -338,18 +333,12 @@ extern "C" __attribute__((visibility("default"))) void load() {
     auto flagsPattern = "40 f9 ?? 18 90 52";
     uintptr_t flags0 = findPattern(libunity, flagsPattern) + 2;
     uintptr_t flags1 = findPattern(flags0+4, flagsPattern) + 2;
-    uintptr_t flags2 = findPattern(flags1+4, flagsPattern) + 2;
     LOG_INFO("First flags: {}", reinterpret_cast<void*>(flags0-libunity));
     LOG_INFO("Second flags: {}", reinterpret_cast<void*>(flags1-libunity));
-    LOG_INFO("Third flags: {}", reinterpret_cast<void*>(flags2-libunity));
+    changeFlag(flags0);
     changeFlag(flags1);
-    if(flags2 > 2) {
-        changeFlag(flags2);
-    } else {
-        changeFlag(flags0);
-    }
 
-    uintptr_t engrave_tombstoneAddr = findPattern(libunity, "ff 43 04 d1 fc 63 0d a9 f7 5b 0e a9 f5 53 0f a9 f3 7b 10 a9 57 d0 3b d5 e8 16 40 f9 f4 03 02 aa", 0x2000000);
+    uintptr_t engrave_tombstoneAddr = findPattern(libunity, "ff 83 04 d1 fd 6b 00 f9 fe 67 0e a9 f8 5f 0f a9 f6 57 10 a9 f4 4f 11 a9 58 d0 3b d5 08 17 40 f9 e1 03 1f 2a", 0x2000000);
     LOG_INFO("engrave_tombstone: {}", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
     INSTALL_HOOK_DIRECT(logger, engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
     INSTALL_HOOK_DIRECT(logger, hook__android_log_write, reinterpret_cast<void*>(__android_log_write));

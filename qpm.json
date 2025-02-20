@@ -1,69 +1,74 @@
 {
-    "version": "0.1.0",
-    "sharedDir": "shared",
-    "dependenciesDir": "extern",
-    "info": {
-        "name": "CrashReporter",
-        "id": "crashreporter",
-        "version": "0.0.1",
-        "url": "https://github.com/darknight1050/CrashReporter",
-        "additionalData": {
-            "overrideSoName": "libcrashreporter.so",
-            "cmake": true
-        }
+  "version": "0.1.0",
+  "sharedDir": "shared",
+  "dependenciesDir": "extern",
+  "info": {
+    "name": "CrashReporter",
+    "id": "crashreporter",
+    "version": "0.0.1",
+    "url": "https://github.com/darknight1050/CrashReporter",
+    "additionalData": {
+      "overrideSoName": "libcrashreporter.so",
+      "cmake": true
+    }
+  },
+  "dependencies": [
+    {
+      "id": "beatsaber-hook",
+      "versionRange": "^6.4.0",
+      "additionalData": {}
     },
-    "workspace": {
-        "scripts": {
-            "qmod": [
-                "pwsh ./build.ps1 -clean",
-                "qpm qmod build",
-                "pwsh ./createqmod.ps1 CrashReporter"
-            ]
-        }
+    {
+      "id": "bs-cordl",
+      "versionRange": "4020.*",
+      "additionalData": {}
     },
-    "dependencies": [
-        {
-            "id": "beatsaber-hook",
-            "versionRange": "^5.1.9",
-            "additionalData": {}
-        },
-        {
-            "id": "bs-cordl",
-            "versionRange": "3700.*",
-            "additionalData": {}
-        },
-        {
-            "id": "custom-types",
-            "versionRange": "^0.17.10",
-            "additionalData": {}
-        },
-        {
-            "id": "bsml",
-            "versionRange": "^0.4.43",
-            "additionalData": {}
-        },
-        {
-            "id": "config-utils",
-            "versionRange": "^1.4.2",
-            "additionalData": {}
-        },
-        {
-            "id": "scotland2",
-            "versionRange": "^0.1.4",
-            "additionalData": {
-                "includeQmod": false,
-                "private": true
-            }
-        },
-        {
-            "id": "libcurl",
-            "versionRange": "=8.5.0",
-            "additionalData": {}
-        },
-        {
-            "id": "paper",
-            "versionRange": "^3.6.3",
-            "additionalData": {}
-        }
-    ]
+    {
+      "id": "custom-types",
+      "versionRange": "^0.18.2",
+      "additionalData": {}
+    },
+    {
+      "id": "bsml",
+      "versionRange": "^0.4.49",
+      "additionalData": {}
+    },
+    {
+      "id": "config-utils",
+      "versionRange": "^2.0.2",
+      "additionalData": {}
+    },
+    {
+      "id": "scotland2",
+      "versionRange": "^0.1.6",
+      "additionalData": {
+        "includeQmod": false,
+        "private": true
+      }
+    },
+    {
+      "id": "libcurl",
+      "versionRange": "=8.5.0",
+      "additionalData": {}
+    },
+    {
+      "id": "paper2_scotland2",
+      "versionRange": "^4.5.0",
+      "additionalData": {}
+    }
+  ],
+  "workspace": {
+    "ndk": "^27.2.12479018",
+    "scripts": {
+      "build": ["pwsh ./scripts/build.ps1"],
+      "clean": ["pwsh ./scripts/build.ps1 -clean"],
+      "copy": ["pwsh ./scripts/copy.ps1"],
+      "log": ["pwsh ./scripts/log.ps1"],
+      "qmod": [
+        "pwsh ./scripts/build.ps1",
+        "qpm qmod manifest",
+        "pwsh ./scripts/createqmod.ps1 CrashReporter -clean"
+      ]
+    }
+  }
 }

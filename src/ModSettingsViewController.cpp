@@ -25,5 +25,8 @@ void DidActivate(ViewController* self, bool firstActivation, bool addedToHierarc
         AddConfigValueToggle(parent, getModConfig().FullCrash);
         AddConfigValueToggle(parent, getModConfig().Log);
         AddConfigValueInputString(parent, getModConfig().UserId);
+        BSML::Lite::CreateUIButton(parent, "CRASH NOW!!!", []() {
+            CRASH_UNLESS(0);
+        });
     }
 }
