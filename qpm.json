@@ -12,6 +12,31 @@
       "cmake": true
     }
   },
+  "workspace": {
+    "scripts": {
+      "build": [
+        "pwsh ./scripts/build.ps1"
+      ],
+      "clean": [
+        "pwsh ./scripts/build.ps1 -clean"
+      ],
+      "copy": [
+        "pwsh ./scripts/copy.ps1"
+      ],
+      "log": [
+        "pwsh ./scripts/log.ps1"
+      ],
+      "qmod": [
+        "pwsh ./scripts/build.ps1",
+        "qpm qmod manifest",
+        "pwsh ./scripts/createqmod.ps1 CrashReporter -clean"
+      ]
+    },
+    "ndk": "^27.2.12479018",
+    "qmodIncludeDirs": [],
+    "qmodIncludeFiles": [],
+    "qmodOutput": null
+  },
   "dependencies": [
     {
       "id": "beatsaber-hook",
@@ -20,7 +45,7 @@
     },
     {
       "id": "bs-cordl",
-      "versionRange": "4030.*",
+      "versionRange": "^4004.0.0",
       "additionalData": {}
     },
     {
@@ -30,7 +55,7 @@
     },
     {
       "id": "bsml",
-      "versionRange": "^0.4.50",
+      "versionRange": "^0.4.51",
       "additionalData": {}
     },
     {
@@ -56,19 +81,5 @@
       "versionRange": "^4.6.1",
       "additionalData": {}
     }
-  ],
-  "workspace": {
-    "ndk": "^27.2.12479018",
-    "scripts": {
-      "build": ["pwsh ./scripts/build.ps1"],
-      "clean": ["pwsh ./scripts/build.ps1 -clean"],
-      "copy": ["pwsh ./scripts/copy.ps1"],
-      "log": ["pwsh ./scripts/log.ps1"],
-      "qmod": [
-        "pwsh ./scripts/build.ps1",
-        "qpm qmod manifest",
-        "pwsh ./scripts/createqmod.ps1 CrashReporter -clean"
-      ]
-    }
-  }
+  ]
 }
