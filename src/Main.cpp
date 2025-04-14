@@ -216,10 +216,10 @@ MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, int* param_2
         lseek(*tombstone_fd, 0, SEEK_SET);
         auto data = escape_json(readFD(*tombstone_fd));
         if(data.empty())
-            data = escape_json("Fallback to normal crash:\n" + std::string(*reinterpret_cast<char**>(param_2)));
+            data = escape_json("Fallback to normal crash:\n" + std::string(*reinterpret_cast<char**>(param_3)));
         uploadData->data += data;
     } else {
-        uploadData->data += escape_json(std::string(*reinterpret_cast<char**>(param_2)));
+        uploadData->data += escape_json(std::string(*reinterpret_cast<char**>(param_3)));
     }
     uploadData->data += "\"";
 
