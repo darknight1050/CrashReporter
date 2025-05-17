@@ -1,4 +1,5 @@
 {
+  "$schema": "https://raw.githubusercontent.com/QuestPackageManager/QPM.Package/refs/heads/main/qpm.schema.json",
   "version": "0.1.0",
   "sharedDir": "shared",
   "dependenciesDir": "extern",
@@ -33,7 +34,10 @@
       ]
     },
     "ndk": "^27.2.12479018",
-    "qmodIncludeDirs": [],
+    "qmodIncludeDirs": [
+      "build",
+      "extern/libs"
+    ],
     "qmodIncludeFiles": [],
     "qmodOutput": null
   },
@@ -45,7 +49,17 @@
     },
     {
       "id": "bs-cordl",
-      "versionRange": "^4004.0.0",
+      "versionRange": "^4005.*",
+      "additionalData": {}
+    },
+    {
+      "id": "bsml",
+      "versionRange": "^0.4.52",
+      "additionalData": {}
+    },
+    {
+      "id": "config-utils",
+      "versionRange": "^2.0.3",
       "additionalData": {}
     },
     {
@@ -54,13 +68,13 @@
       "additionalData": {}
     },
     {
-      "id": "bsml",
-      "versionRange": "^0.4.51",
+      "id": "libcurl",
+      "versionRange": "=8.5.0",
       "additionalData": {}
     },
     {
-      "id": "config-utils",
-      "versionRange": "^2.0.2",
+      "id": "paper2_scotland2",
+      "versionRange": "^4.6.4",
       "additionalData": {}
     },
     {
@@ -70,16 +84,6 @@
         "includeQmod": false,
         "private": true
       }
-    },
-    {
-      "id": "libcurl",
-      "versionRange": "=8.5.0",
-      "additionalData": {}
-    },
-    {
-      "id": "paper2_scotland2",
-      "versionRange": "^4.6.1",
-      "additionalData": {}
     }
   ]
 }
