@@ -6,11 +6,13 @@
   "author": "darknight1050",
   "version": "${version}",
   "packageId": "com.beatgames.beatsaber",
-  "packageVersion": "1.40.5_5928",
+  "packageVersion": "1.40.6_6407",
   "description": "Automatically upload crashes.",
   "coverImage": "cover.png",
   "dependencies": [],
-  "modFiles": ["${binary}"],
+  "modFiles": [
+    "${binary}"
+  ],
   "libraryFiles": [],
   "fileCopies": [],
   "copyExtensions": []
