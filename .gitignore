@@ -58,3 +58,4 @@ mod.json
 /advanced-logging.ps1
 /BuildTools
 *.qmod
+.cache/

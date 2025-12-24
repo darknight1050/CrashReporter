@@ -17,15 +17,15 @@ if (-not ($LastExitCode -eq 0)) {
 }
 
 if ($debug.IsPresent) {
-    & adb push build/debug/libbsml.so /sdcard/ModData/com.beatgames.beatsaber/Modloader/early_mods/libbsml.so
+    & adb push build/debug/libcrashreporter.so /sdcard/ModData/com.beatgames.beatsaber/Modloader/early_mods/libcrashreporter.so
 } else {
-    & adb push build/libbsml.so /sdcard/ModData/com.beatgames.beatsaber/Modloader/early_mods/libbsml.so
+    & adb push build/libcrashreporter.so /sdcard/ModData/com.beatgames.beatsaber/Modloader/early_mods/libcrashreporter.so
 }
 
 & adb shell am force-stop com.beatgames.beatsaber
-& adb shell am start com.beatgames.beatsaber/com.unity3d.player.UnityPlayerActivity
+& adb shell am start com.beatgames.beatsaber/com.unity3d.player.UnityPlayerGameActivity
 Start-Sleep -Seconds 1.0
-& adb shell am start com.beatgames.beatsaber/com.unity3d.player.UnityPlayerActivity
+& adb shell am start com.beatgames.beatsaber/com.unity3d.player.UnityPlayerGameActivity
 if ($log.IsPresent) {
     & $PSScriptRoot/log.ps1
 }
