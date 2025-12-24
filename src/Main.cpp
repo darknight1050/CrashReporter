@@ -401,14 +401,15 @@ extern "C" __attribute__((visibility("default"))) void load() {
     LOG_INFO("libunity.so: {}", reinterpret_cast<void*>(libunity));
     //Change open() flags to O_RDWR, so that we can read the tombstone file descriptor again
     auto flagsPattern = "40 f9 ?? 18 90 52";
-    uintptr_t flags0 = findPattern(libunity, flagsPattern) + 2;
+    bool multiple;
+    uintptr_t flags0 = findUniquePatternInLibunity(multiple, flagsPattern, "open_flags") + 2;
+    LOG_INFO("First flags: {}", reinterpret_cast<void*>(flags0));
     uintptr_t flags1 = findPattern(flags0+4, flagsPattern) + 2;
-    LOG_INFO("First flags: {}", reinterpret_cast<void*>(flags0-libunity));
-    LOG_INFO("Second flags: {}", reinterpret_cast<void*>(flags1-libunity));
+    LOG_INFO("Second flags: {}", reinterpret_cast<void*>(flags1));
     changeFlag(flags0);
     changeFlag(flags1);
 
-    uintptr_t engrave_tombstoneAddr = findPattern(libunity, "ff 83 04 d1 fd 6b 00 f9 fe 67 0e a9 f8 5f 0f a9 f6 57 10 a9 f4 4f 11 a9 58 d0 3b d5 08 17 40 f9 e1 03 1f 2a", 0x2000000);
+    uintptr_t engrave_tombstoneAddr = findUniquePatternInLibunity(multiple, "ff 83 04 d1 fd 6b 00 f9 fe 67 0e a9 f8 5f 0f a9 f6 57 10 a9 f4 4f 11 a9 58 d0 3b d5 e1 03 1f 2a f3 03 05 aa", "engrave_tombstone");
     LOG_INFO("engrave_tombstone: {}", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
     INSTALL_HOOK_DIRECT(logger, engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
     void* __android_log_write_log_messageAddr = dlsym(RTLD_DEFAULT, "__android_log_write_log_message");
