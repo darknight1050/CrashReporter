@@ -367,6 +367,10 @@ extern "C" __attribute__((visibility("default"))) void setup(CModInfo& info) {
     info.version_long = 0;
     modInfo.assign(info);
     getModConfig().Init(modInfo);
+    // Migrate the default URL if it is still set to the old analyzer.
+    if (getModConfig().Url.GetValue() == "https://analyzer.questmodding.com/api/upload") {
+        getModConfig().Url.SetValue(getModConfig().Url.GetDefaultValue());
+    }
 }
 
 extern "C" __attribute__((visibility("default"))) void load() {

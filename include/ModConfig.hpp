@@ -7,6 +7,6 @@ DECLARE_CONFIG(ModConfig) {
     CONFIG_VALUE(FullCrash, bool, "FullCrash", false, "Upload tombstone or only backtrace");
     CONFIG_VALUE(Log, bool, "Log", false, "Upload last log lines");
     CONFIG_VALUE(UserId, std::string, "UserId", "Default");
-    CONFIG_VALUE(Url, std::string, "Url", "https://analyzer.questmodding.com/api/upload");
+    CONFIG_VALUE(Url, std::string, "Url", "https://analyze.aeternal.dev/api/upload");
 
 };
