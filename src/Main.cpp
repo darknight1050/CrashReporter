@@ -438,5 +438,6 @@ extern "C" __attribute__((visibility("default"))) void load() {
     }
 
     BSML::Register::RegisterSettingsMenu(MOD_ID, DidActivate, false);
+    BSML::Register::RegisterMainMenu(MOD_ID, MOD_ID, "Configure crash reporting", DidActivate);
     LOG_INFO("Successfully installed {}!", MOD_ID);
 }
