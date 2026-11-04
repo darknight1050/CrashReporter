@@ -11,6 +11,7 @@
 #include "UnityEngine/SystemInfo.hpp"
 #include "UnityEngine/Application.hpp"
 #include "LogBuffer.hpp"
+#include "Gzip.hpp"
 
 #include "libcurl/shared/curl.h"
 #include "libcurl/shared/easy.h"
@@ -178,13 +179,27 @@ void uploadReport(ReportRequest const& request) {
         LOG_ERROR("Could not allocate upload headers");
         return;
     }
+    std::string compressed;
+    std::string_view body = request.payload;
+    if (gzipCompress(request.payload, compressed)) {
+        auto updated = curl_slist_append(headers.get(), "Content-Encoding: gzip");
+        if (!updated) {
+            LOG_ERROR("Could not allocate gzip upload header");
+            return;
+        }
+        headers.release();
+        headers.reset(updated);
+        body = compressed;
+    } else {
+        LOG_INFO("Could not compress crash report; uploading original JSON");
+    }
     std::string response;
     char error[CURL_ERROR_SIZE]{};
     auto handle = curl.get();
     curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers.get());
     curl_easy_setopt(handle, CURLOPT_URL, query_encode(request.url).c_str());
-    curl_easy_setopt(handle, CURLOPT_POSTFIELDS, request.payload.data());
-    curl_easy_setopt(handle, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(request.payload.size()));
+    curl_easy_setopt(handle, CURLOPT_POSTFIELDS, body.data());
+    curl_easy_setopt(handle, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(body.size()));
     curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, UploadTimeoutMs);
     curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, UploadTimeoutMs);
     curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1L);
