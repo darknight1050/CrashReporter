@@ -9,6 +9,7 @@
 #include "ModSettingsViewController.hpp"
 #include "UnityCrashHandlerPatterns.hpp"
 #include "UnityEngine/SystemInfo.hpp"
+#include "UnityEngine/Application.hpp"
 #include "LogBuffer.hpp"
 
 #include "libcurl/shared/curl.h"
@@ -26,6 +27,7 @@ constexpr long UploadTimeoutMs = 3000L;
 #define USER_AGENT (std::string("CrashReporter/") + VERSION + " (+https://github.com/darknight1050/CrashReporter)").c_str()
 
 std::string LibIl2CppBuildID = "not_found";
+std::string GameVersion;
 
 modloader::ModInfo modInfo = {MOD_ID, VERSION, 0};
 
@@ -140,6 +142,7 @@ ReportRequest captureReport(std::string const& stacktrace, std::string type) {
     ReportRequest request{getModConfig().Url.GetValue(), getModConfig().UserId.GetValue(), std::move(type), {}};
     auto& data = request.payload;
     data = "{\"userId\":\"" + escape_json(request.userId) + "\",\"libIl2CppBuildID\":\"" + escape_json(LibIl2CppBuildID)
+        + "\",\"gameVersion\":\"" + escape_json(GameVersion)
         + "\",\"stacktrace\":\"" + escape_json(stacktrace) + "\"";
     if (getModConfig().Log.GetValue()) {
         auto log = buffer.getData();
@@ -361,6 +364,12 @@ extern "C" __attribute__((visibility("default"))) void load() {
         LOG_ERROR("Could not initialize curl: {}", curl_easy_strerror(curlResult));
     }
 
+    // Cache the running game's version before installing crash hooks, so
+    // reporting never needs to call Unity APIs from the crash handler.
+    i2c::functions::initialize();
+    auto gameVersion = UnityEngine::Application::get_version();
+    if (gameVersion) GameVersion = std::string(gameVersion);
+
     auto buildId = i2c::binary::get_build_id(modloader_get_libil2cpp_path());
     if(buildId.has_value())
         LibIl2CppBuildID = buildId.value();
@@ -403,7 +412,6 @@ extern "C" __attribute__((visibility("default"))) void load() {
         INSTALL_HOOK(logger, hook__android_log_buf_write, reinterpret_cast<void*>(__android_log_buf_write));
     }
 
-    i2c::functions::initialize();
     BSML::Init();
 
     if(getModConfig().UserId.GetValue().empty() || getModConfig().UserId.GetValue() == "Default") {
