@@ -1,12 +1,15 @@
-#include "beatsaber-hook/shared/utils/utils.h"
-#include "beatsaber-hook/shared/utils/hooking.hpp"
+#include "beatsaber-hook/shared/utils.hpp"
+#include "beatsaber-hook/shared/hooking.hpp"
+#include "beatsaber-hook/shared/binary.hpp"
 
-#include "custom-types/shared/register.hpp"
 #include "scotland2/shared/loader.hpp"
 
 #include "CustomLogger.hpp"
 #include "ModConfig.hpp"
 #include "ModSettingsViewController.hpp"
+#include "UnityCrashHandlerPatterns.hpp"
+#include "UnityEngine/SystemInfo.hpp"
+#include "LogBuffer.hpp"
 
 #include "libcurl/shared/curl.h"
 #include "libcurl/shared/easy.h"
@@ -15,10 +18,11 @@
 #include <sstream>
 #include <iomanip>
 #include <android/log.h>
+#include <cerrno>
+#include <unistd.h>
+#include <memory>
 
-#define PAGE_START(addr) (~(PAGE_SIZE - 1) & (addr))
-
-#define TIMEOUT 3000
+constexpr long UploadTimeoutMs = 3000L;
 #define USER_AGENT (std::string("CrashReporter/") + VERSION + " (+https://github.com/darknight1050/CrashReporter)").c_str()
 
 std::string LibIl2CppBuildID = "not_found";
@@ -38,7 +42,7 @@ std::string query_encode(const std::string& s) {
         {
             ret += ch;
         }
-        else if ((ch == '%') && IS_HEXDIG(s[i+0]) && IS_HEXDIG(s[i+1]))
+        else if ((ch == '%') && i + 1 < s.size() && IS_HEXDIG(s[i+0]) && IS_HEXDIG(s[i+1]))
         {
             ret += s.substr(i-1, 3);
             i += 2;
@@ -108,60 +112,6 @@ std::string escape_json(const std::string &s) {
     return o.str();
 }
 
-class LogBuffer {
-
-    char* buffer;
-    size_t size;
-    size_t index;
-    bool wrapped;
-
-public:
-    LogBuffer(size_t size) {
-        this->buffer = nullptr;
-        this->size = size;
-        this->index = 0;
-        this->wrapped = false;
-    }
-
-    ~LogBuffer() {
-        if (buffer)
-            delete buffer;
-    }
-
-    void append(const std::string& text) {
-        if(!buffer)
-            buffer = new char[size];
-        auto length = text.size();
-        if (length <= size - index) {
-            memcpy(buffer + index, text.data(), length);
-            index += length;
-            if (index >= size) {
-                index = 0;
-                wrapped = true;
-            }
-        }
-        else {
-            auto first = size - index;
-            auto second = length - first;
-            memcpy(buffer + index, text.data(), first);
-            memcpy(buffer, text.data() + first, second);
-            index = second;
-            wrapped = true;
-        }
-    }
-
-    const std::string getData() {
-        if(!buffer)
-            return "";
-        std::string data;
-        if(wrapped)
-            data.append(buffer + index, size - index);
-        data.append(buffer, index);
-        return data;
-    }
-
-};
-
 std::string readFD(int fd) {
     std::string data;
     const int bufSize = 4096;
@@ -177,113 +127,109 @@ std::string readFD(int fd) {
 
 LogBuffer buffer(0x20000);
 
-/*void engrave_tombstone(unique_fd_impl param_1,unique_fd_impl param_2,void *param_3,map *param_4, int param_5,ProcessInfo *param_6,OpenFilesList *param_7,basic_string *param_8)*/
-MAKE_HOOK_NO_CATCH(engrave_tombstone, 0x0, void, int* tombstone_fd, int* param_2, void* param_3, void* param_4, int param_5, void* param_6, void* param_7, void* param_8) {
-     engrave_tombstone(tombstone_fd, param_2, param_3, param_4, param_5, param_6, param_7, param_8);
-    if(!getModConfig().Enabled.GetValue())
+struct ReportRequest {
+    std::string url;
+    std::string userId;
+    std::string type;
+    std::string payload;
+};
+
+// Snapshot configuration, log text and mod metadata on the calling thread.
+// The upload request owns its native strings.
+ReportRequest captureReport(std::string const& stacktrace, std::string type) {
+    ReportRequest request{getModConfig().Url.GetValue(), getModConfig().UserId.GetValue(), std::move(type), {}};
+    auto& data = request.payload;
+    data = "{\"userId\":\"" + escape_json(request.userId) + "\",\"libIl2CppBuildID\":\"" + escape_json(LibIl2CppBuildID)
+        + "\",\"stacktrace\":\"" + escape_json(stacktrace) + "\"";
+    if (getModConfig().Log.GetValue()) {
+        auto log = buffer.getData();
+        auto firstLineEnd = log.find('\n');
+        if (firstLineEnd != std::string::npos) log.erase(0, firstLineEnd + 1);
+        data += ",\"log\":\"" + escape_json(log) + "\"";
+    }
+    data += ",\"mods\":[";
+    auto mods = modloader_get_loaded();
+    auto releaseMods = i2c::on_scope_exit([&] { modloader_free_results(&mods); });
+    bool first = true;
+    for (auto const& mod : std::span<CModResult const>(mods.array, mods.size)) {
+        if (!first) data += ',';
+        first = false;
+        auto const& info = mod.info;
+        data += "{\"name\":\"" + escape_json(info.id ? info.id : "") + "\",\"version\":\""
+            + escape_json(info.version ? info.version : "") + "\",\"version_long\":" + std::to_string(info.version_long) + "}";
+    }
+    data += "]}";
+    return request;
+}
+
+void uploadReport(ReportRequest const& request) {
+    LOG_INFO("Uploading {} to: {}", request.type, request.url);
+    std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), curl_easy_cleanup);
+    if (!curl) {
+        LOG_ERROR("Could not initialize the {} upload", request.type);
         return;
-    std::string url = getModConfig().Url.GetValue();
-    const char* type = getModConfig().FullCrash.GetValue() ? "tombstone" : "crash";
-    std::string userId = getModConfig().UserId.GetValue();
-
-    LOG_INFO("Uploading {} to: {}", type, url.c_str());
-    Paper::ffi::paper2_wait_flush_timeout(50);
-
-    struct UploadData {
-        std::string data = "";
-        std::size_t offset = 0;
-    };
-    UploadData* uploadData = new UploadData();
-    std::string response = "";
-    // Init curl
-    auto* curl = curl_easy_init();
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, "Accept: */*");
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-    // Set headers
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers); 
-    curl_easy_setopt(curl, CURLOPT_URL, query_encode(url).c_str());
-    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "POST");
-    curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
-    // Don't wait forever, time out after TIMEOUT seconds.
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, TIMEOUT);
-    // Follow HTTP redirects if necessary.
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-
-    uploadData->data = "{\"userId\": \"" + userId + "\", \"libIl2CppBuildID\": \"" + LibIl2CppBuildID + "\", \"stacktrace\": \"";
-
-    if(getModConfig().FullCrash.GetValue()) {
-        lseek(*tombstone_fd, 0, SEEK_SET);
-        auto data = escape_json(readFD(*tombstone_fd));
-        if(data.empty())
-            data = escape_json("Fallback to normal crash:\n" + std::string(*reinterpret_cast<char**>(param_3)));
-        uploadData->data += data;
-    } else {
-        uploadData->data += escape_json(std::string(*reinterpret_cast<char**>(param_3)));
     }
-    uploadData->data += "\"";
-
-    if(getModConfig().Log.GetValue()) {
-        uploadData->data += ", \"log\":\"";
-        std::string log = buffer.getData();
-        auto firstLineEnd = log.find("\n");
-        if(firstLineEnd != std::string::npos)
-            log.erase(0, firstLineEnd + 1);
-        uploadData->data += escape_json(log);
-        uploadData->data += "\"";
+    std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> headers(
+        curl_slist_append(nullptr, "Content-Type: application/json"), curl_slist_free_all);
+    if (!headers) {
+        LOG_ERROR("Could not allocate upload headers");
+        return;
     }
-
-    uploadData->data += ", \"mods\": [";
-    auto modResults = modloader_get_loaded();
-    std::span<CModResult const> modResultsSpan(modResults.array, modResults.size);
-    for (auto itr : modResultsSpan) {
-        auto info = itr.info;
-        uploadData->data += "{ \"name\":\"" + std::string(info.id) + "\", \"version\":\"" + info.version + "\", \"version_long\":" + std::to_string(info.version_long) + "},";
-    }
-    if(uploadData->data.ends_with(","))
-        uploadData->data.erase(uploadData->data.end()-1);
-    uploadData->data += "]";
-
-    uploadData->data += "}";
-
-    curl_easy_setopt(curl, CURLOPT_READFUNCTION,
-        +[](char* buffer, std::size_t size, std::size_t nitems, UploadData* userdata) {
-            std::size_t length = std::min(userdata->data.size() - userdata->offset, size * nitems);
-            memcpy(buffer, userdata->data.data() + userdata->offset, length);
-            userdata->offset += length;
-            return length;
-        });
-    curl_easy_setopt(curl, CURLOPT_READDATA, uploadData);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, 
-        +[](char* buffer, std::size_t size, std::size_t nitems, std::string* userdata) {
-            std::size_t newLength = size * nitems;
+    std::string response;
+    char error[CURL_ERROR_SIZE]{};
+    auto handle = curl.get();
+    curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers.get());
+    curl_easy_setopt(handle, CURLOPT_URL, query_encode(request.url).c_str());
+    curl_easy_setopt(handle, CURLOPT_POSTFIELDS, request.payload.data());
+    curl_easy_setopt(handle, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(request.payload.size()));
+    curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, UploadTimeoutMs);
+    curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, UploadTimeoutMs);
+    curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(handle, CURLOPT_MAXREDIRS, 3L);
+    curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, error);
+    curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION,
+        +[](char* bytes, std::size_t size, std::size_t count, std::string* output) noexcept -> std::size_t {
+            auto length = size * count;
+            // A report response is an ID, not an unbounded download.
+            if (length > 64 * 1024 - output->size()) return 0;
             try {
-                userdata->append(buffer, newLength);
-            } catch(std::bad_alloc &e) {
-                LOG_ERROR("Failed to allocate string of size: {}", newLength);
-                return std::size_t(0);
+                output->append(bytes, length);
+                return length;
+            } catch (...) {
+                return 0;
             }
-            return newLength;
         });
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false);
-    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-    auto res = curl_easy_perform(curl);
-    if (res == CURLE_OK) {
-        long httpCode(0);
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
-        if(httpCode == 200) {
-            LOG_INFO("Uploaded {} with crashId: {} and userId: {}", type, response.c_str(), userId.c_str());
+    curl_easy_setopt(handle, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(handle, CURLOPT_USERAGENT, USER_AGENT);
+    curl_easy_setopt(handle, CURLOPT_SSL_VERIFYPEER, 0L);
+    auto result = curl_easy_perform(handle);
+    if (result == CURLE_OK) {
+        long httpCode = 0;
+        curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &httpCode);
+        if (httpCode == 200) {
+            LOG_INFO("Uploaded {} with crashId: {} and userId: {}", request.type, response, request.userId);
         } else {
-            LOG_ERROR("Uploading {} failed: {}: {}", type, httpCode, response.c_str());
+            LOG_ERROR("Uploading {} failed: {}: {}", request.type, httpCode, response);
         }
     } else {
-        LOG_ERROR("Uploading {} failed: {}: {}", type, (long)res, curl_easy_strerror(res));
+        LOG_ERROR("Uploading {} failed: {}: {}", request.type, static_cast<long>(result), error[0] ? error : curl_easy_strerror(result));
     }
-    curl_easy_cleanup(curl);
-    delete uploadData;
+}
+
+MAKE_HOOK(engrave_tombstone, (nullptr), void, int* tombstone_fd, int* param_2, void* param_3, void* param_4, int param_5, void* param_6, void* param_7, void* param_8) {
+    engrave_tombstone(tombstone_fd, param_2, param_3, param_4, param_5, param_6, param_7, param_8);
+    if (!getModConfig().Enabled.GetValue()) return;
+    auto crashText = param_3 ? *reinterpret_cast<char**>(param_3) : nullptr;
+    std::string trace = crashText ? crashText : "(no native backtrace)";
+    bool fullCrash = getModConfig().FullCrash.GetValue();
+    if (fullCrash && tombstone_fd && *tombstone_fd >= 0 && lseek(*tombstone_fd, 0, SEEK_SET) >= 0) {
+        auto tombstone = readFD(*tombstone_fd);
+        if (!tombstone.empty()) trace = std::move(tombstone);
+        else trace = "Fallback to normal crash:\n" + trace;
+    }
+    Paper::Logger::WaitForFlushTimeout(50);
+    uploadReport(captureReport(trace, fullCrash ? "tombstone" : "crash"));
 }
 
 std::string getPrioString(android_LogPriority prio) {
@@ -310,7 +256,7 @@ std::string getPrioString(android_LogPriority prio) {
     return "U";
 }
 
-MAKE_HOOK_NO_CATCH(hook__android_log_write, 0x0, int, int prio, const char* tag, const char* text) {
+MAKE_HOOK(hook__android_log_write, (nullptr), int, int prio, const char* tag, const char* text) {
     if(getModConfig().Log.GetValue()) {
         if(!tag)
             tag = "";
@@ -331,7 +277,7 @@ MAKE_HOOK_NO_CATCH(hook__android_log_write, 0x0, int, int prio, const char* tag,
     return hook__android_log_write(prio, tag, text);
 }
 
-MAKE_HOOK_NO_CATCH(hook__android_log_buf_write, 0x0, int, int bufID, int prio, const char* tag, const char* text) {
+MAKE_HOOK(hook__android_log_buf_write, (nullptr), int, int bufID, int prio, const char* tag, const char* text) {
     if(getModConfig().Log.GetValue()) {
         if(!tag)
             tag = "";
@@ -352,7 +298,7 @@ MAKE_HOOK_NO_CATCH(hook__android_log_buf_write, 0x0, int, int bufID, int prio, c
     return hook__android_log_buf_write(bufID, prio, tag, text);
 }
 
-MAKE_HOOK_NO_CATCH(hook__android_log_write_log_message, 0x0, void, struct __android_log_message* log_message) {
+MAKE_HOOK(hook__android_log_write_log_message, (nullptr), void, struct __android_log_message* log_message) {
     if(log_message && getModConfig().Log.GetValue()) {
         if(!log_message->tag)
             log_message->tag = "";
@@ -373,10 +319,28 @@ MAKE_HOOK_NO_CATCH(hook__android_log_write_log_message, 0x0, void, struct __andr
     hook__android_log_write_log_message(log_message);
 }
 
-void changeFlag(uintptr_t addr) {
-	mprotect((void *) PAGE_START(addr), PAGE_SIZE * 2, PROT_READ | PROT_WRITE | PROT_EXEC);
-    *reinterpret_cast<char*>(addr) += 0x20;
-	mprotect((void *) PAGE_START(addr), PAGE_SIZE * 2, PROT_READ | PROT_EXEC);
+bool changeFlag(uintptr_t addr) {
+    // Change the MOVZ immediate from O_WRONLY to O_RDWR, preserving its register.
+    auto instruction = reinterpret_cast<uint32_t*>(addr);
+    if ((addr % alignof(uint32_t)) != 0 || (*instruction & ~0x1fu) != 0x52901820u) {
+        LOG_ERROR("Unexpected tombstone open instruction at {}", reinterpret_cast<void*>(addr));
+        return false;
+    }
+    auto pageSize = sysconf(_SC_PAGESIZE);
+    if (pageSize <= 0)
+        return false;
+    auto page = reinterpret_cast<void*>(addr - addr % static_cast<uintptr_t>(pageSize));
+    if (mprotect(page, pageSize, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
+        LOG_ERROR("Could not make tombstone flags writable: {}", errno);
+        return false;
+    }
+    *instruction += 0x20;
+    __builtin___clear_cache(reinterpret_cast<char*>(addr), reinterpret_cast<char*>(addr + sizeof(*instruction)));
+    if (mprotect(page, pageSize, PROT_READ | PROT_EXEC) != 0) {
+        LOG_ERROR("Could not restore tombstone page permissions: {}", errno);
+        return false;
+    }
+    return true;
 }
 
 extern "C" __attribute__((visibility("default"))) void setup(CModInfo& info) {
@@ -391,42 +355,59 @@ extern "C" __attribute__((visibility("default"))) void load() {
     LOG_INFO("Starting {} installation...", MOD_ID);
 
     constexpr const auto logger = Paper::ConstLoggerContext(MOD_ID);
+    // Initialize the native crash upload transport.
+    auto curlResult = curl_global_init(CURL_GLOBAL_DEFAULT);
+    if (curlResult != CURLE_OK) {
+        LOG_ERROR("Could not initialize curl: {}", curl_easy_strerror(curlResult));
+    }
 
-    auto buildId = getBuildId(modloader_get_libil2cpp_path());
+    auto buildId = i2c::binary::get_build_id(modloader_get_libil2cpp_path());
     if(buildId.has_value())
         LibIl2CppBuildID = buildId.value();
     LOG_INFO("libil2cpp.so buildId: {}", LibIl2CppBuildID.c_str());
 
-    uintptr_t libunity = baseAddr("libunity.so");
+    uintptr_t libunity = i2c::binary::base_addr("libunity.so");
     LOG_INFO("libunity.so: {}", reinterpret_cast<void*>(libunity));
     //Change open() flags to O_RDWR, so that we can read the tombstone file descriptor again
-    auto flagsPattern = "40 f9 ?? 18 90 52";
-    bool multiple;
-    uintptr_t flags0 = findUniquePatternInLibunity(multiple, flagsPattern, "open_flags") + 2;
+    bool multiple = false;
+    uintptr_t flags0 = i2c::binary::libunity_unique_pattern(multiple, UnityCrashHandler::createFlags, "create_flags");
+    if (!libunity || !flags0 || multiple) {
+        LOG_ERROR("Unsupported Unity tombstone creation code; skipping CrashReporter hooks");
+        return;
+    }
     LOG_INFO("First flags: {}", reinterpret_cast<void*>(flags0));
-    uintptr_t flags1 = findPattern(flags0+4, flagsPattern) + 2;
+    multiple = false;
+    uintptr_t flags1 = i2c::binary::libunity_unique_pattern(multiple, UnityCrashHandler::reopenFlags, "reopen_flags");
+    if (!flags1 || multiple) {
+        LOG_ERROR("Unsupported Unity tombstone reopen code; skipping CrashReporter hooks");
+        return;
+    }
     LOG_INFO("Second flags: {}", reinterpret_cast<void*>(flags1));
-    changeFlag(flags0);
-    changeFlag(flags1);
 
-    uintptr_t engrave_tombstoneAddr = findUniquePatternInLibunity(multiple, "ff 83 04 d1 fd 6b 00 f9 fe 67 0e a9 f8 5f 0f a9 f6 57 10 a9 f4 4f 11 a9 58 d0 3b d5 e1 03 1f 2a f3 03 05 aa", "engrave_tombstone");
+    multiple = false;
+    uintptr_t engrave_tombstoneAddr = i2c::binary::libunity_unique_pattern(multiple, UnityCrashHandler::engraveTombstone, "engrave_tombstone");
+    if (!engrave_tombstoneAddr || multiple) {
+        LOG_ERROR("Unsupported Unity crash handler; skipping CrashReporter hooks");
+        return;
+    }
+    if (!changeFlag(flags0) || !changeFlag(flags1))
+        return;
     LOG_INFO("engrave_tombstone: {}", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
-    INSTALL_HOOK_DIRECT(logger, engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
+    INSTALL_HOOK(logger, engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
     void* __android_log_write_log_messageAddr = dlsym(RTLD_DEFAULT, "__android_log_write_log_message");
     LOG_INFO("__android_log_write_log_message: {}", __android_log_write_log_messageAddr);
     if(__android_log_write_log_messageAddr) {
-        INSTALL_HOOK_DIRECT(logger, hook__android_log_write_log_message, __android_log_write_log_messageAddr);
+        INSTALL_HOOK(logger, hook__android_log_write_log_message, __android_log_write_log_messageAddr);
     } else {
-        INSTALL_HOOK_DIRECT(logger, hook__android_log_write, reinterpret_cast<void*>(__android_log_write));
-        INSTALL_HOOK_DIRECT(logger, hook__android_log_buf_write, reinterpret_cast<void*>(__android_log_buf_write));
+        INSTALL_HOOK(logger, hook__android_log_write, reinterpret_cast<void*>(__android_log_write));
+        INSTALL_HOOK(logger, hook__android_log_buf_write, reinterpret_cast<void*>(__android_log_buf_write));
     }
-    
-    il2cpp_functions::Init();
+
+    i2c::functions::initialize();
     BSML::Init();
 
     if(getModConfig().UserId.GetValue().empty() || getModConfig().UserId.GetValue() == "Default") {
-        static function_ptr_t<StringW> getDeviceUniqueIdentifier = il2cpp_utils::resolve_icall<StringW>("UnityEngine.SystemInfo::GetDeviceUniqueIdentifier");
-        getModConfig().UserId.SetValue(getDeviceUniqueIdentifier());
+        getModConfig().UserId.SetValue(UnityEngine::SystemInfo::get_deviceUniqueIdentifier());
     }
 
     BSML::Register::RegisterSettingsMenu(MOD_ID, DidActivate, false);

@@ -26,7 +26,7 @@ void DidActivate(ViewController* self, bool firstActivation, bool addedToHierarc
         AddConfigValueToggle(parent, getModConfig().Log);
         AddConfigValueInputString(parent, getModConfig().UserId);
         BSML::Lite::CreateUIButton(parent, "CRASH NOW!!!", []() {
-            // Make sure to crash on a different thread (BSML on click handlers and unity things catch c++ exceptions and tombstone doesn't get created)
+            // This tests the fatal tombstone path. Keep it off Unity's UI thread.
             std::thread t([] {    
                 CRASH_UNLESS(0);
             });
