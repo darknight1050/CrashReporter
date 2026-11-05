@@ -13,6 +13,8 @@
 #include "Gzip.hpp"
 #include "CrashStack.hpp"
 #include "AndroidLogCrashGuard.hpp"
+#include "CrashWatchdog.hpp"
+#include "ThreadDump.hpp"
 
 #include "libcurl/shared/curl.h"
 #include "libcurl/shared/easy.h"
@@ -248,11 +250,13 @@ void uploadTombstone(int* tombstone_fd, void* param_3) {
         if (!tombstone.empty()) trace = std::move(tombstone);
         else trace = "Fallback to normal crash:\n" + trace;
     }
+    if (fullCrash) trace += ThreadDump::captureOtherThreads();
     Paper::Logger::WaitForFlushTimeout(50);
     uploadReport(captureReport(trace, fullCrash ? "tombstone" : "crash"));
 }
 
 MAKE_HOOK_NO_CATCH(engrave_tombstone, (nullptr), void, int* tombstone_fd, int* param_2, void* param_3, void* param_4, int param_5, void* param_6, void* param_7, void* param_8) {
+    CrashWatchdog::enterReport();
     struct Arguments {
         int* fd; int* fd2; void* context; void* threads; int tid;
         void* process; void* files; void* text;
@@ -408,10 +412,15 @@ extern "C" __attribute__((visibility("default"))) void load() {
         LOG_ERROR("Unsupported Unity crash handler; skipping CrashReporter hooks");
         return;
     }
+    if (!CrashWatchdog::initialize()) {
+        LOG_ERROR("Could not create crash watchdog; skipping CrashReporter hooks");
+        return;
+    }
     if (!CrashStack::initialize()) {
         LOG_ERROR("Could not allocate the crash handler stack; skipping CrashReporter hooks");
         return;
     }
+    if (!ThreadDump::initialize()) LOG_ERROR("Could not initialize other-thread stack capture");
     if (!changeFlag(flags0) || !changeFlag(flags1))
         return;
     LOG_INFO("engrave_tombstone: {}", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));

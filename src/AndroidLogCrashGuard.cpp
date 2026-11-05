@@ -1,4 +1,5 @@
 #include "AndroidLogCrashGuard.hpp"
+#include "CrashWatchdog.hpp"
 #include <android/log.h>
 #include <csignal>
 #include <dlfcn.h>
@@ -13,27 +14,29 @@ constexpr int signals[]{SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGFPE};
 struct sigaction previous[sizeof(signals) / sizeof(*signals)]{};
 
 void fatalSignal(int signal, siginfo_t* info, void* context) {
+    CrashWatchdog::enterFatal();
     // A crash inside ART's logging callback leaves its logger mutex held.
     // Unity's fatal handler logs before reaching engrave_tombstone. Route those
     // messages straight to logd so it cannot re-enter the interrupted logger.
     // Android's setter only assigns a function pointer; no lookup or allocation.
     // Keep this route until the fatal handler terminates the process.
-    if (loggingDepth) setLogger(logdLogger);
+    if (loggingDepth && setLogger && logdLogger) setLogger(logdLogger);
     for (unsigned i = 0; i < sizeof(signals) / sizeof(*signals); ++i) {
         if (signals[i] != signal) continue;
         auto const& action = previous[i];
         if (action.sa_flags & SA_SIGINFO) action.sa_sigaction(signal, info, context);
         else action.sa_handler(signal);
+        CrashWatchdog::leaveFatal();
         return;
     }
 }
 }
 
 bool AndroidLogCrashGuard::initialize() {
+    if (!CrashWatchdog::initialize()) return false;
     setLogger = reinterpret_cast<SetLogger>(dlsym(RTLD_DEFAULT, "__android_log_set_logger"));
     logdLogger = reinterpret_cast<Logger>(dlsym(RTLD_DEFAULT, "__android_log_logd_logger"));
-    if (!setLogger || !logdLogger) return false;
-    bool complete = true;
+    bool complete = setLogger && logdLogger;
     for (unsigned i = 0; i < sizeof(signals) / sizeof(*signals); ++i) {
         struct sigaction action{};
         if (sigaction(signals[i], nullptr, &action) != 0) { complete = false; continue; }
