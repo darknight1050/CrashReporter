@@ -14,6 +14,7 @@ class LogBuffer {
     std::atomic_flag busy{};
     size_t index = 0;
     bool wrapped = false;
+    bool startsMidLine = false;
 
     // One attempt only: even same-thread reentry must skip the buffer.
     // A mutex try_lock is undefined when the calling thread already owns it.
@@ -32,18 +33,23 @@ class LogBuffer {
         explicit operator bool() const noexcept { return acquired; }
     };
 
-public:
-    explicit LogBuffer(size_t size) : buffer(size) {}
-
-    void append(std::string_view text) noexcept {
-        TryGuard lock(busy);
-        if (!lock || buffer.empty() || text.empty()) return;
+    void appendUnlocked(std::string_view text) noexcept {
+        if (buffer.empty() || text.empty()) return;
         if (text.size() >= buffer.size()) {
+            auto discarded = text.size() - buffer.size();
+            if (discarded) startsMidLine = text[discarded - 1] != '\n';
+            else if (wrapped || index) startsMidLine = buffer[(index + buffer.size() - 1) % buffer.size()] != '\n';
             text = text.substr(text.size() - buffer.size());
             std::memcpy(buffer.data(), text.data(), text.size());
             index = 0;
             wrapped = true;
             return;
+        }
+        auto length = wrapped ? buffer.size() : index;
+        if (length + text.size() > buffer.size()) {
+            auto discarded = length + text.size() - buffer.size();
+            auto start = wrapped ? index : 0;
+            startsMidLine = buffer[(start + discarded - 1) % buffer.size()] != '\n';
         }
         auto first = std::min(text.size(), buffer.size() - index);
         std::memcpy(buffer.data() + index, text.data(), first);
@@ -52,12 +58,43 @@ public:
         index = (index + text.size()) % buffer.size();
     }
 
-    std::string getData() {
+public:
+    explicit LogBuffer(size_t size) : buffer(size) {}
+
+    void append(std::string_view text) noexcept {
+        TryGuard lock(busy);
+        if (lock) appendUnlocked(text);
+    }
+
+    // No temporary strings or allocations in Android's logging callback.
+    // Hold one guard for the whole message so concurrent prefixes cannot mix.
+    void appendLog(char priority, std::string_view tag, std::string_view text) noexcept {
+        TryGuard lock(busy);
+        if (!lock) return;
+        const char prefix[]{priority, ' '};
+        do {
+            auto end = text.find('\n');
+            appendUnlocked(std::string_view(prefix, sizeof(prefix)));
+            appendUnlocked(tag);
+            appendUnlocked(": ");
+            appendUnlocked(text.substr(0, end));
+            appendUnlocked("\n");
+            if (end == std::string_view::npos) break;
+            text.remove_prefix(end + 1);
+        } while (!text.empty());
+    }
+
+    std::string getData(bool completeLinesOnly = false) {
         TryGuard lock(busy);
         if (!lock || buffer.empty()) return {};
         std::string data;
         if (wrapped) data.append(buffer.data() + index, buffer.size() - index);
         data.append(buffer.data(), index);
+        if (completeLinesOnly && startsMidLine) {
+            auto end = data.find('\n');
+            if (end == std::string::npos) data.clear();
+            else data.erase(0, end + 1);
+        }
         return data;
     }
 };

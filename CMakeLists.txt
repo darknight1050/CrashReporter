@@ -3,6 +3,7 @@ include(qpm_defines.cmake)
 
 cmake_minimum_required(VERSION 3.21)
 project(${COMPILE_ID})
+enable_language(ASM)
 
 # c++ standard
 set(CMAKE_CXX_STANDARD 23)
@@ -33,6 +34,7 @@ add_library(
     SHARED 
     ${cpp_file_list}
     ${c_file_list}
+    ${SOURCE_DIR}/CrashStack.S
 )
 
 target_include_directories(${COMPILE_ID} PRIVATE .)
@@ -51,6 +53,10 @@ target_include_directories(${COMPILE_ID} PRIVATE ${EXTERN_DIR}/includes/beatsabe
 target_link_libraries(${COMPILE_ID} PRIVATE -llog -lz)
 # add extern stuff like libs and other includes
 include(extern.cmake)
+
+# Hook 6 ships its ARM64 hook implementation as source for consumers.
+RECURSE_FILES(inline_hook_sources ${EXTERN_DIR}/includes/beatsaber-hook/shared/inline-hook/*.cpp)
+target_sources(${COMPILE_ID} PRIVATE ${inline_hook_sources})
 
 add_custom_command(TARGET ${COMPILE_ID} POST_BUILD
             COMMAND ${CMAKE_STRIP} -g -S -d --strip-all

@@ -5,13 +5,29 @@
 #include "bsml/shared/BSML-Lite/Creation/Layout.hpp"
 #include "ModConfig.hpp"
 #include "CustomLogger.hpp"
+#include "beatsaber-hook/shared/utils/utils.h"
 #include "UnityEngine/Application.hpp"
 #include "libcurl/shared/curl.h"
 #include <memory>
+#include <atomic>
+#include <thread>
 
 using namespace UnityEngine;
 using namespace UnityEngine::UI;
 using namespace HMUI;
+
+namespace {
+void requestCrash(bool workerThread) {
+    static std::atomic_flag requested{};
+    if (requested.test_and_set()) return;
+
+    auto crash = [] {
+        CRASH_UNLESS(false);
+    };
+    if (workerThread) std::thread(crash).detach();
+    else crash();
+}
+}
 
 void DidActivate(ViewController* self, bool firstActivation, bool addedToHierarchy, bool screenSystemEnabling) {
     if(firstActivation) {
@@ -47,12 +63,7 @@ void DidActivate(ViewController* self, bool firstActivation, bool addedToHierarc
             }
             UnityEngine::Application::OpenURL(url + "/crashes?userId=" + encoded.get());
         });
-        BSML::Lite::CreateUIButton(parent, "CRASH NOW!!!", []() {
-            // This tests the fatal tombstone path. Keep it off Unity's UI thread.
-            std::thread t([] {    
-                CRASH_UNLESS(0);
-            });
-            t.detach();
-        });
+        BSML::Lite::CreateUIButton(parent, "CRASH (Worker Thread)", [] { requestCrash(true); });
+        BSML::Lite::CreateUIButton(parent, "CRASH (Main Thread)", [] { requestCrash(false); });
     }
 }

@@ -33,7 +33,7 @@
         "pwsh ./scripts/createqmod.ps1 CrashReporter -clean"
       ]
     },
-    "ndk": "^29.0.14206865",
+    "ndk": "^27.3.13750724",
     "qmodIncludeDirs": [
       "build",
       "extern/libs"
@@ -44,37 +44,32 @@
   "dependencies": [
     {
       "id": "beatsaber-hook",
-      "versionRange": "^9.2.0",
+      "versionRange": "^6.4.2",
       "additionalData": {}
     },
     {
       "id": "bs-cordl",
-      "versionRange": "^4503.0.0",
+      "versionRange": "^4008.0.0",
       "additionalData": {}
     },
     {
       "id": "bsml",
-      "versionRange": "^0.6.3",
+      "versionRange": "^0.4.55",
       "additionalData": {}
     },
     {
       "id": "config-utils",
-      "versionRange": "^3.0.0",
+      "versionRange": "^2.0.3",
       "additionalData": {}
     },
     {
-      "id": "reflectcpp",
-      "versionRange": "^0.25.0",
-      "additionalData": { "private": true }
-    },
-    {
       "id": "custom-types",
-      "versionRange": "^0.21.1",
+      "versionRange": "^0.18.4",
       "additionalData": {}
     },
     {
       "id": "libcurl",
-      "versionRange": "=8.5.0",
+      "versionRange": "^8.5.0",
       "additionalData": {}
     },
     {
@@ -89,11 +84,6 @@
         "includeQmod": false,
         "private": true
       }
-    },
-    {
-      "id": "flamingo",
-      "versionRange": "^1.2.1",
-      "additionalData": {}
     }
   ]
 }
