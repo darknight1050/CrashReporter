@@ -4,6 +4,7 @@
 #include "scotland2/shared/loader.hpp"
 
 #include "CustomLogger.hpp"
+#include "ConfigMigration.hpp"
 #include "ModConfig.hpp"
 #include "ModSettingsViewController.hpp"
 #include "UnityCrashHandlerPatterns.hpp"
@@ -361,10 +362,7 @@ extern "C" __attribute__((visibility("default"))) void setup(CModInfo& info) {
     info.version_long = 0;
     modInfo.assign(info);
     getModConfig().Init(modInfo);
-    // Migrate the default URL if it is still set to the old analyzer.
-    if (getModConfig().Url.GetValue() == "https://analyzer.questmodding.com/api/upload") {
-        getModConfig().Url.SetValue(getModConfig().Url.GetDefaultValue());
-    }
+    ConfigMigration::migrate();
 }
 
 extern "C" __attribute__((visibility("default"))) void load() {
