@@ -1,5 +1,6 @@
-#include "beatsaber-hook/shared/utils/utils.h"
-#include "beatsaber-hook/shared/utils/hooking.hpp"
+#include "beatsaber-hook/shared/utils.hpp"
+#include "beatsaber-hook/shared/hooking.hpp"
+#include "beatsaber-hook/shared/binary.hpp"
 
 #include "scotland2/shared/loader.hpp"
 
@@ -255,7 +256,7 @@ void uploadTombstone(int* tombstone_fd, void* param_3) {
     uploadReport(captureReport(trace, fullCrash ? "tombstone" : "crash"));
 }
 
-MAKE_HOOK_NO_CATCH(engrave_tombstone, (nullptr), void, int* tombstone_fd, int* param_2, void* param_3, void* param_4, int param_5, void* param_6, void* param_7, void* param_8) {
+MAKE_HOOK(engrave_tombstone, (nullptr), void, int* tombstone_fd, int* param_2, void* param_3, void* param_4, int param_5, void* param_6, void* param_7, void* param_8) {
     CrashWatchdog::enterReport();
     struct Arguments {
         int* fd; int* fd2; void* context; void* threads; int tid;
@@ -284,33 +285,33 @@ void captureLog(int priority, char const* tag, char const* text) noexcept {
 // On current Android, print/write functions can inline the dispatch and never
 // enter __android_log_write_log_message. Capture their common destination,
 // preserving Android/ART's existing logger and passing the message unchanged.
-MAKE_HOOK_NO_CATCH(hook__android_log_logd_logger, (nullptr), void, struct __android_log_message const* message) {
+MAKE_HOOK(hook__android_log_logd_logger, (nullptr), void, struct __android_log_message const* message) {
     AndroidLogCrashGuard::Scope logging;
     if (message) captureLog(message->priority, message->tag, message->message);
     hook__android_log_logd_logger(message);
 }
 
 // Compatibility paths for Android versions without the common logd entry point.
-MAKE_HOOK_NO_CATCH(hook__android_log_write_log_message, (nullptr), void, struct __android_log_message* message) {
+MAKE_HOOK(hook__android_log_write_log_message, (nullptr), void, struct __android_log_message* message) {
     AndroidLogCrashGuard::Scope logging;
     if (message) captureLog(message->priority, message->tag, message->message);
     hook__android_log_write_log_message(message);
 }
 
-MAKE_HOOK_NO_CATCH(hook__android_log_write, (nullptr), int, int priority, const char* tag, const char* text) {
+MAKE_HOOK(hook__android_log_write, (nullptr), int, int priority, const char* tag, const char* text) {
     AndroidLogCrashGuard::Scope logging;
     captureLog(priority, tag, text);
     return hook__android_log_write(priority, tag, text);
 }
 
-MAKE_HOOK_NO_CATCH(hook__android_log_buf_write, (nullptr), int, int bufferId, int priority, const char* tag, const char* text) {
+MAKE_HOOK(hook__android_log_buf_write, (nullptr), int, int bufferId, int priority, const char* tag, const char* text) {
     AndroidLogCrashGuard::Scope logging;
     captureLog(priority, tag, text);
     return hook__android_log_buf_write(bufferId, priority, tag, text);
 }
 
-// Hook 6 has no libunity-specific scanner. Search only readable executable
-// ELF segments, retaining the unique-match checks without a fixed-size scan.
+// Search only readable executable ELF segments and require a unique match
+// across all segments, retaining the backport's native-hook validation.
 uintptr_t findUniquePatternInLibunity(bool& multiple, const char* pattern, const char* label) {
     struct Search { const char* pattern; const char* label; uintptr_t result; bool multiple; } search{pattern, label, 0, false};
     dl_iterate_phdr(+[](dl_phdr_info* info, size_t, void* opaque) {
@@ -320,8 +321,8 @@ uintptr_t findUniquePatternInLibunity(bool& multiple, const char* pattern, const
             auto const& segment = info->dlpi_phdr[i];
             if (segment.p_type != PT_LOAD || (segment.p_flags & (PF_R | PF_X)) != (PF_R | PF_X)) continue;
             bool duplicate = false;
-            auto match = findUniquePattern(duplicate, info->dlpi_addr + segment.p_vaddr,
-                search.pattern, search.label, segment.p_memsz);
+            auto match = i2c::binary::find_unique_pattern(duplicate, info->dlpi_addr + segment.p_vaddr,
+                search.pattern, segment.p_memsz, search.label);
             search.multiple |= duplicate || (match && search.result);
             if (match) search.result = match;
         }
@@ -379,16 +380,16 @@ extern "C" __attribute__((visibility("default"))) void load() {
 
     // Cache the running game's version before installing crash hooks, so
     // reporting never needs to call Unity APIs from the crash handler.
-    il2cpp_functions::Init();
+    i2c::functions::initialize();
     auto gameVersion = UnityEngine::Application::get_version();
     if (gameVersion) GameVersion = std::string(gameVersion);
 
-    auto buildId = getBuildId(modloader_get_libil2cpp_path());
+    auto buildId = i2c::binary::get_build_id(modloader_get_libil2cpp_path());
     if(buildId.has_value())
         LibIl2CppBuildID = buildId.value();
     LOG_INFO("libil2cpp.so buildId: {}", LibIl2CppBuildID.c_str());
 
-    uintptr_t libunity = baseAddr("libunity.so");
+    uintptr_t libunity = i2c::binary::base_addr("libunity.so");
     LOG_INFO("libunity.so: {}", reinterpret_cast<void*>(libunity));
     //Change open() flags to O_RDWR, so that we can read the tombstone file descriptor again
     bool multiple = false;
@@ -424,16 +425,16 @@ extern "C" __attribute__((visibility("default"))) void load() {
     if (!changeFlag(flags0) || !changeFlag(flags1))
         return;
     LOG_INFO("engrave_tombstone: {}", reinterpret_cast<void*>(engrave_tombstoneAddr-libunity));
-    INSTALL_HOOK_DIRECT(logger, engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
+    INSTALL_HOOK(logger, engrave_tombstone, reinterpret_cast<void*>(engrave_tombstoneAddr));
     auto logdLogger = dlsym(RTLD_DEFAULT, "__android_log_logd_logger");
     auto writeLogMessage = dlsym(RTLD_DEFAULT, "__android_log_write_log_message");
     if (logdLogger) {
-        INSTALL_HOOK_DIRECT(logger, hook__android_log_logd_logger, logdLogger);
+        INSTALL_HOOK(logger, hook__android_log_logd_logger, logdLogger);
     } else if (writeLogMessage) {
-        INSTALL_HOOK_DIRECT(logger, hook__android_log_write_log_message, writeLogMessage);
+        INSTALL_HOOK(logger, hook__android_log_write_log_message, writeLogMessage);
     } else {
-        INSTALL_HOOK_DIRECT(logger, hook__android_log_write, reinterpret_cast<void*>(__android_log_write));
-        INSTALL_HOOK_DIRECT(logger, hook__android_log_buf_write, reinterpret_cast<void*>(__android_log_buf_write));
+        INSTALL_HOOK(logger, hook__android_log_write, reinterpret_cast<void*>(__android_log_write));
+        INSTALL_HOOK(logger, hook__android_log_buf_write, reinterpret_cast<void*>(__android_log_buf_write));
     }
 
     if (!AndroidLogCrashGuard::initialize())

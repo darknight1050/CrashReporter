@@ -54,10 +54,6 @@ target_link_libraries(${COMPILE_ID} PRIVATE -llog -lz)
 # add extern stuff like libs and other includes
 include(extern.cmake)
 
-# Hook 6 ships its ARM64 hook implementation as source for consumers.
-RECURSE_FILES(inline_hook_sources ${EXTERN_DIR}/includes/beatsaber-hook/shared/inline-hook/*.cpp)
-target_sources(${COMPILE_ID} PRIVATE ${inline_hook_sources})
-
 add_custom_command(TARGET ${COMPILE_ID} POST_BUILD
             COMMAND ${CMAKE_STRIP} -g -S -d --strip-all
             "lib${COMPILE_ID}.so" -o "stripped_lib${COMPILE_ID}.so"
