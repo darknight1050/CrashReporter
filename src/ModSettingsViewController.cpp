@@ -5,7 +5,7 @@
 #include "bsml/shared/BSML-Lite/Creation/Layout.hpp"
 #include "ModConfig.hpp"
 #include "CustomLogger.hpp"
-#include "beatsaber-hook/shared/utils/utils.h"
+#include "beatsaber-hook/shared/utils.hpp"
 #include "UnityEngine/Application.hpp"
 #include "libcurl/shared/curl.h"
 #include <memory>

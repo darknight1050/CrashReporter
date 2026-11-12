@@ -77,7 +77,12 @@
       },
       {
         "id": "libcurl",
-        "versionRange": "^8.5.0",
+        "versionRange": "=8.5.0",
+        "additionalData": {}
+      },
+      {
+        "id": "flamingo",
+        "versionRange": "^1.2.1",
         "additionalData": {}
       },
       {
@@ -210,15 +215,15 @@
     {
       "dependency": {
         "id": "libcurl",
-        "versionRange": "=8.7.1",
+        "versionRange": "=8.5.0",
         "additionalData": {
           "staticLinking": true,
-          "soLink": "https://github.com/darknight1050/openssl-curl-android/releases/download/v8.7.1/libcurl.a",
+          "soLink": "https://github.com/darknight1050/openssl-curl-android/releases/download/v8.5.0/libcurl.a",
           "overrideSoName": "libcurl.a",
-          "branchName": "version-v8.7.1"
+          "branchName": "version-v8.5.0"
         }
       },
-      "version": "8.7.1"
+      "version": "8.5.0"
     },
     {
       "dependency": {
